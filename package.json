@@ -1,0 +1,44 @@
+{
+  "name": "@i2h2a/mcp-middleware",
+  "version": "0.1.0-alpha.1",
+  "description": "Reference implementation of OID4VP verification middleware for I2H2A delegation credentials",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "test:real": "ts-node -r dotenv/config --project tsconfig.scripts.json scripts/test-real-credential.ts",
+    "test:watch": "jest --watch",
+    "lint": "eslint src/**/*.ts"
+  },
+  "keywords": [
+    "i2h2a",
+    "oid4vp",
+    "verifiable-credentials",
+    "mcp",
+    "ai-agents",
+    "delegation"
+  ],
+  "author": "I2H2A Contributors",
+  "license": "MIT",
+  "repository": "https://github.com/UltraQuamfy/i2h2a-middleware",
+  "dependencies": {
+    "@noble/ed25519": "^2.0.0",
+    "did-resolver": "^4.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.11",
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/node": "^20.10.6",
+    "@typescript-eslint/eslint-plugin": "^6.17.0",
+    "@typescript-eslint/parser": "^6.17.0",
+    "dotenv": "^17.4.1",
+    "eslint": "^8.56.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
