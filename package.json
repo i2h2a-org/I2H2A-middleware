@@ -21,7 +21,7 @@
   ],
   "author": "I2H2A Contributors",
   "license": "MIT",
-  "repository": "https://github.com/UltraQuamfy/i2h2a-middleware",
+  "repository": "https://github.com/UltraQuamfy/I2H2A-middleware",
   "dependencies": {
     "@noble/ed25519": "^2.0.0",
     "did-resolver": "^4.1.0",
