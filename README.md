@@ -15,7 +15,7 @@ When an AI agent presents a VP to your MCP server, this middleware:
 1. Parses the VP and extracts the I2H2A credential
 2. Verifies the VP proof is signed by the agent's `did:key`
 3. Verifies the issuer's signature on the I2H2A credential
-4. Resolves both DIDs and obtains verification key material
+4. Resolves both DIDs using a W3C-compliant universal resolver
 5. Checks temporal validity (`issuanceDate` / `expirationDate`)
 6. Checks revocation status via the credential's status list
 7. Validates delegation scope (`mcpServers`, `taskType`) against the request
@@ -60,11 +60,11 @@ if (!result.valid) {
 
 The middleware implements the full 9-step normative algorithm from [I2H2A-v1.0.md Section 4](https://github.com/UltraQuamfy/I2H2A-spec/blob/main/I2H2A-v1.0.md#4-verification-algorithm).
 
-**did:key resolution** — self-resolving, no external resolver required. The public key is derived directly from the DID string.
+**DID resolution** — the middleware resolves issuer and agent DIDs using a W3C-compliant universal resolver. The resolver endpoint is configurable via `I2H2A_UNIVERSAL_RESOLVER_URL`. `did:key` is self-resolving and requires no external call.
 
-**cheqd credential verification** — calls cheqd Studio `/credential/verify` to verify the I2H2A JWT-VC signature and revocation status.
+**Credential signature verification** — the middleware verifies the JWT-VC signature using public key material from the resolved DID document. Any DID method supported by your configured resolver works — `did:cheqd`, `did:web`, `did:ion`, `did:key`, or any W3C-conformant method.
 
-> **Testnet note:** On cheqd testnet, `policies.credentialStatus` always returns `false` — known limitation. The middleware checks `data.revoked === true` only. Restore full policy check on mainnet migration.
+**Revocation status** — checked against the `credentialStatus` field in the credential using the referenced status list. Compatible with Status List 2021 and Bitstring Status List.
 
 ---
 
@@ -87,21 +87,25 @@ The VP JWT is signed by the agent's `did:key`. The embedded I2H2A JWT-VC is sign
 
 ---
 
-## Production deployment
+## Configuration
 
-Call this middleware at session initiation — once per session, not per request. Present the VP as a Bearer token in the MCP OAuth 2.1 slot.
+| Environment variable | Description |
+|---|---|
+| `I2H2A_UNIVERSAL_RESOLVER_URL` | W3C universal resolver endpoint (e.g. `https://dev.uniresolver.io`) |
 
-For deployments where local `file:` dependencies cause build issues (e.g. Railway), inline the verification logic directly from source rather than importing the package. This repo is the reference implementation.
+`did:key` requires no resolver configuration — it is self-resolving per the W3C DID Core spec.
 
 ---
 
-## Reference deployment
+## DID method support
 
-Live on cheqd testnet:
+The middleware is DID-method agnostic. Any method resolvable via your configured universal resolver is supported. `did:key` is resolved locally with no network call required.
 
-- Platform: [ultraquamfy.netlify.app](https://ultraquamfy.netlify.app)
-- MCP shim: [ultraquamfy-production.up.railway.app](https://ultraquamfy-production.up.railway.app)
-- Issuer DID: `did:cheqd:testnet:ec6a1292-eb42-4754-bef3-9c3e95c32212`
+---
+
+## Production deployment
+
+Call this middleware at session initiation — once per session, not per request. Present the VP as a Bearer token in the MCP OAuth 2.1 slot.
 
 ---
 
