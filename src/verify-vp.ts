@@ -143,6 +143,12 @@ function checkCredentialExpiry(
 
 function validateV1Rules(credential: I2H2ACredential): VerificationResult | null {
   const subject = firstCredentialSubject(credential);
+  if (subject.authorization == null) {
+    return { valid: false, error: 'credentialSubject.authorization is required' };
+  }
+  if (typeof subject.delegatedBy !== 'string' || subject.delegatedBy.trim() === '') {
+    return { valid: false, error: 'credentialSubject.delegatedBy is required' };
+  }
   if (subject.delegationDepth !== 0) {
     return { valid: false, error: 'Invalid delegation depth (must be 0 for V1)' };
   }
@@ -152,18 +158,17 @@ function validateV1Rules(credential: I2H2ACredential): VerificationResult | null
   return null;
 }
 
-function buildClaims(credential: I2H2ACredential, vpHolder: string): Record<string, unknown> {
+function buildClaims(
+  credential: I2H2ACredential,
+  vpHolder: string,
+  credentialIssuerDid: string
+): Record<string, unknown> {
   const subject = firstCredentialSubject(credential);
-  const holderDid = extractIssuerDid(credential);
   return {
     agentDid: vpHolder || subject.id,
-    holderDid,
+    holderDid: credentialIssuerDid,
     scope: subject.scope,
-    authorization: {
-      delegationDepth: subject.delegationDepth,
-      parentCredential: subject.parentCredential,
-      credentialTypes: credentialTypes(credential),
-    },
+    authorization: subject.authorization,
   };
 }
 
@@ -289,5 +294,6 @@ export async function verifyI2H2AVP(
     return v1;
   }
 
-  return { valid: true, claims: buildClaims(credential, vpHolder) };
+  const credentialIssuerDid = typeof credJwtEnv?.iss === 'string' ? credJwtEnv.iss : '';
+  return { valid: true, claims: buildClaims(credential, vpHolder, credentialIssuerDid) };
 }

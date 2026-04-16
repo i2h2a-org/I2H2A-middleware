@@ -34,13 +34,13 @@ async function gate(vp: VerifiablePresentation) {
 
 Verifies a Verifiable Presentation containing an I2H2A credential. Returns `{ valid: boolean, error?: string, claims?: I2H2AClaims }`.
 
-### `resolveDidDocument(did: string): Promise<DIDDocument>`
+### `resolveDidDocument(did: string, resolverUrl?: string): Promise<DIDDocument>`
 
-Resolves a DID to a DID document. Supports `did:key` (resolved locally, no network call) and any DID method resolvable via a W3C Universal Resolver endpoint, configurable via the `I2H2A_UNIVERSAL_RESOLVER_URL` environment variable.
+Resolves a DID to a DID document. Supports `did:key` (resolved locally, no network call) and any DID method resolvable via a W3C Universal Resolver endpoint. The resolver URL is passed as an optional per-call argument `resolverUrl`, defaulting to the universal resolver fallback.
 
 ### `checkCredentialStatus(credential: VerifiableCredential): Promise<boolean>`
 
-Checks credential status against the status list referenced in `credentialStatus`. Returns `true` if active (not revoked). Supports [W3C Bitstring Status List](https://www.w3.org/TR/vc-bitstring-status-list/) and [Status List 2021](https://www.w3.org/community/reports/credentials/CG-FINAL-vc-status-list-2021-20230102/).
+Checks credential status against the status list referenced in `credentialStatus`. Returns `true` if active (not revoked). Decodes a base64-encoded `encodedList` and checks the revocation bit at the given index.
 
 ## DID resolution
 

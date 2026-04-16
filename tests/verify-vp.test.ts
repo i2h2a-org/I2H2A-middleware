@@ -55,8 +55,10 @@ describe('verifyI2H2AVP', () => {
     jest.clearAllMocks();
   });
 
-  function buildVcJwt(opts?: { exp?: number }) {
+  function buildVcJwt(opts?: { exp?: number; authorization?: unknown; delegatedBy?: string }) {
     const nowSec = Math.floor(Date.now() / 1000);
+    const hasAuthorizationOverride =
+      opts != null && Object.prototype.hasOwnProperty.call(opts, 'authorization');
     const vcBody = {
       '@context': ['https://www.w3.org/ns/credentials/v2'],
       type: ['VerifiableCredential', 'I2H2A'],
@@ -64,6 +66,10 @@ describe('verifyI2H2AVP', () => {
       credentialSubject: {
         id: agentDid,
         scope: { mcpServers: ['allowed-server'], taskType: 'read' },
+        authorization: hasAuthorizationOverride
+          ? opts?.authorization
+          : { delegationDepth: 0, parentCredential: null },
+        delegatedBy: opts?.delegatedBy ?? holderDid,
         delegationDepth: 0,
         parentCredential: null,
       },
@@ -173,5 +179,21 @@ describe('verifyI2H2AVP', () => {
 
     expect(res.valid).toBe(false);
     expect(res.error).toBe('Delegation scope does not match request');
+  });
+
+  it('rejects when credentialSubject.authorization is missing', async () => {
+    const vpJwt = buildVpJwt(buildVcJwt({ authorization: undefined }));
+    const res = await verifyI2H2AVP(vpJwt, { skipStatusCheck: true });
+
+    expect(res.valid).toBe(false);
+    expect(res.error).toBe('credentialSubject.authorization is required');
+  });
+
+  it('rejects when credentialSubject.delegatedBy is missing', async () => {
+    const vpJwt = buildVpJwt(buildVcJwt({ delegatedBy: '' }));
+    const res = await verifyI2H2AVP(vpJwt, { skipStatusCheck: true });
+
+    expect(res.valid).toBe(false);
+    expect(res.error).toBe('credentialSubject.delegatedBy is required');
   });
 });

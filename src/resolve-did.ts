@@ -88,7 +88,7 @@ function resolveDidKeyLocally(did: string): DIDDocument {
 }
 
 /** Default public universal resolver (HTTP binding); override in tests or production. */
-const DEFAULT_UNIVERSAL_RESOLVER = 'https://dev.uniresolver.io/1.0/identifiers/';
+const FALLBACK_UNIVERSAL_RESOLVER_URL = 'https://dev.uniresolver.io/1.0/identifiers/';
 
 export interface UniversalResolverResponse {
   didDocument?: DidResolverDocument;
@@ -100,7 +100,7 @@ async function resolveViaUniversalBinding(
   did: string,
   resolverUrl?: string
 ): Promise<DidResolverDocument> {
-  const url = `${resolverUrl ?? DEFAULT_UNIVERSAL_RESOLVER}${encodeURIComponent(did)}`;
+  const url = `${resolverUrl ?? FALLBACK_UNIVERSAL_RESOLVER_URL}${encodeURIComponent(did)}`;
   const res = await fetch(url, {
     headers: { Accept: 'application/did+json,application/json' },
   });
@@ -118,7 +118,7 @@ async function resolveViaUniversalBinding(
 }
 
 /**
- * Method-specific resolvers delegate to the HTTP universal resolver (did:web only).
+ * Method-specific resolvers delegate to the HTTP universal resolver (did:web and did:cheqd).
  */
 function createUniversalDidResolver(): DIDResolver {
   return async (

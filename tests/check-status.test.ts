@@ -14,6 +14,8 @@ function makeCredential(statusOverride?: Partial<CredentialStatus>): I2H2ACreden
     credentialSubject: {
       id: 'did:example:agent',
       scope: { mcpServers: ['mcp-a'], taskType: 'read-only' },
+      authorization: null,
+      delegatedBy: 'did:cheqd:testnet:ec6a1292-eb42-4754-bef3-9c3e95c32212',
       delegationDepth: 0,
       parentCredential: null,
     },

@@ -117,6 +117,8 @@ export interface I2H2ADelegationScope extends JsonLdObject {
 export interface I2H2ACredentialSubject extends JsonLdObject {
   id: UriString;
   scope: I2H2ADelegationScope;
+  authorization: Record<string, unknown> | null;
+  delegatedBy: string;
   delegationDepth: number;
   parentCredential: UriString | null;
 }

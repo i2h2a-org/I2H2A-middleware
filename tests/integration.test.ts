@@ -24,7 +24,7 @@ function makeDidDoc(did: string, publicJwk: crypto.JsonWebKey) {
   };
 }
 
-describe('integration (end-to-end VP verification)', () => {
+describe('integration (mocked resolver and status)', () => {
   const holderDid = 'did:key:test-holder';
   const agentDid = 'did:key:test-agent';
 
@@ -58,8 +58,12 @@ describe('integration (end-to-end VP verification)', () => {
     parentCredential?: string | null;
     scopeServer?: string;
     scopeTask?: string;
+    authorization?: unknown;
+    delegatedBy?: string;
   }): string {
     const nowSec = Math.floor(Date.now() / 1000);
+    const hasAuthorizationOverride =
+      opts != null && Object.prototype.hasOwnProperty.call(opts, 'authorization');
     const vcBody = {
       '@context': ['https://www.w3.org/ns/credentials/v2'],
       type: opts?.types ?? ['VerifiableCredential', 'I2H2A'],
@@ -70,6 +74,10 @@ describe('integration (end-to-end VP verification)', () => {
           mcpServers: [opts?.scopeServer ?? 'allowed-server'],
           taskType: opts?.scopeTask ?? 'read-only',
         },
+        authorization: hasAuthorizationOverride
+          ? opts?.authorization
+          : { delegationDepth: 0, parentCredential: null },
+        delegatedBy: opts?.delegatedBy ?? holderDid,
         delegationDepth: opts?.delegationDepth ?? 0,
         parentCredential: opts?.parentCredential ?? null,
       },
@@ -235,5 +243,21 @@ describe('integration (end-to-end VP verification)', () => {
 
     expect(res.valid).toBe(false);
     expect(res.error).toBe('Parent credential must be null for H2A (V1)');
+  });
+
+  it('VP returns error when credentialSubject.authorization is absent', async () => {
+    const vpJwt = buildVpJwt(buildVcJwt({ authorization: undefined }));
+    const res = await verifyI2H2AVP(vpJwt);
+
+    expect(res.valid).toBe(false);
+    expect(res.error).toBe('credentialSubject.authorization is required');
+  });
+
+  it('VP returns error when credentialSubject.delegatedBy is absent', async () => {
+    const vpJwt = buildVpJwt(buildVcJwt({ delegatedBy: '' }));
+    const res = await verifyI2H2AVP(vpJwt);
+
+    expect(res.valid).toBe(false);
+    expect(res.error).toBe('credentialSubject.delegatedBy is required');
   });
 });
