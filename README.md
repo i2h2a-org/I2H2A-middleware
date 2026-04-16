@@ -1,23 +1,24 @@
 # @i2h2a/mcp-middleware
 
-Reference implementation of I2H2A VP verification middleware for MCP servers and other verifiers.
+Reference implementation of I2H2A SD-JWT+KB verification middleware for MCP servers and other verifiers.
+
+Implements the [I2H2A v0.2 specification](https://github.com/UltraQuamfy/I2H2A-spec/blob/main/I2H2A-v0.2-draft.md): SD-JWT VC format (RFC 9901), ES256/P-256 signatures, KB-JWT holder binding.
 
 ## Installation
 
-```bash
+```
 npm install @i2h2a/mcp-middleware
 ```
 
 ## Quick start
 
 ```typescript
-import { verifyI2H2AVP } from '@i2h2a/mcp-middleware';
-import type { VerifiablePresentation } from '@i2h2a/mcp-middleware';
+import { verifyI2H2APresentation } from '@i2h2a/mcp-middleware';
 
-async function gate(vp: VerifiablePresentation) {
-  const result = await verifyI2H2AVP(vp, {
+async function gate(sdJwtKb: string, nonce: string) {
+  const result = await verifyI2H2APresentation(sdJwtKb, {
     mcpServerId: 'your-mcp-server-id',
-    taskType: 'read-only',
+    nonce,
   });
 
   if (!result.valid) {
@@ -28,37 +29,58 @@ async function gate(vp: VerifiablePresentation) {
 }
 ```
 
+The `sdJwtKb` parameter is an SD-JWT+KB string in the format:
+```
+~~~...~
+```
+
 ## API reference
 
-### `verifyI2H2AVP(vp, options?)`
+### `verifyI2H2APresentation(sdJwtKb, options)`
 
-Verifies a Verifiable Presentation containing an I2H2A credential. Returns `{ valid: boolean, error?: string, claims?: I2H2AClaims }`.
+Verifies an SD-JWT+KB presentation containing an I2H2A credential.
 
-### `resolveDidDocument(did: string, resolverUrl?: string): Promise<DIDDocument>`
+**Parameters:**
+- `sdJwtKb: string` — SD-JWT+KB compact serialisation
+- `options.mcpServerId: string` — verifier audience identifier; must match `aud` in KB-JWT
+- `options.nonce: string` — challenge nonce issued by verifier; must match `nonce` in KB-JWT
+- `options.resolverUrl?: string` — optional DID resolver URL override
 
-Resolves a DID to a DID document. Supports `did:key` (resolved locally, no network call) and any DID method resolvable via a W3C Universal Resolver endpoint. The resolver URL is passed as an optional per-call argument `resolverUrl`, defaulting to the universal resolver fallback.
+**Returns:** `{ valid: boolean, error?: string, claims?: I2H2AClaims }`
 
-### `checkCredentialStatus(credential: VerifiableCredential): Promise<boolean>`
+**Verification steps performed:**
+1. Parse SD-JWT+KB (issuer JWT, disclosures, KB-JWT)
+2. Verify issuer ES256 signature (P-256, `JsonWebKey2020` verification method)
+3. Verify `vct` claim equals `"I2H2A"`
+4. Verify all disclosure hashes against `_sd` array
+5. Verify KB-JWT ES256 signature against `cnf.jwk` (agent P-256 public key)
+6. Verify KB-JWT `aud`, `nonce`, and `sd_hash` binding
+7. Check temporal validity (`nbf`, `exp`)
+8. Check Bitstring Status List revocation status on cheqd
+9. Enforce delegation scope (`scope.mcpServers`, `scope.taskType`)
+10. Assert `delegationDepth === 0` and `parentCredential === null`
 
-Checks credential status against the status list referenced in `credentialStatus`. Returns `true` if active (not revoked). Decodes a base64-encoded `encodedList` and checks the revocation bit at the given index.
+### `resolveDidDocument(did, resolverUrl?)`
+
+Resolves a DID to a DID document. `did:key` is resolved locally. `did:cheqd` is resolved via the cheqd native resolver. All other DID methods are resolved via the W3C Universal Resolver endpoint (default: `https://dev.uniresolver.io/1.0/identifiers/`).
+
+### `checkCredentialStatus(credentialStatus)`
+
+Checks Bitstring Status List revocation status for the given `credentialStatus` object. Returns `true` if active (not revoked).
 
 ## DID resolution
 
-`did:key` is resolved locally per the [did:key method spec](https://w3c-ccg.github.io/did-method-key/). All other DID methods including `did:cheqd`, `did:web`, and any W3C-compliant method are resolved via a [W3C Universal Resolver](https://dev.uniresolver.io) endpoint.
+- `did:key` — resolved locally, no network call
+- `did:cheqd` — resolved via cheqd native resolver
+- All other methods — resolved via configurable W3C Universal Resolver endpoint
 
-The resolver URL defaults to `https://dev.uniresolver.io/1.0/identifiers/`. To use a different resolver, pass `resolverUrl` in the options:
+## Credential format
 
-```typescript
-const result = await verifyI2H2AVP(vp, {
-  mcpServerId: 'your-mcp-server-id',
-  taskType: 'read-only',
-  resolverUrl: 'https://your-resolver.example.com/1.0/identifiers/',
-});
-```
+This middleware verifies **SD-JWT VC** credentials (RFC 9901) with **ES256/P-256** signatures only. JWT-VC format (v0.1) is not supported in v0.2+.
 
 ## I2H2A specification
 
-[https://github.com/UltraQuamfy/I2H2A-spec](https://github.com/UltraQuamfy/I2H2A-spec)
+https://github.com/UltraQuamfy/I2H2A-spec
 
 ## License
 
