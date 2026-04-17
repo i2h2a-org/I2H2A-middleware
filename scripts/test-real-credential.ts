@@ -11,7 +11,7 @@ import 'dotenv/config';
 import * as crypto from 'crypto';
 import * as ed from '@noble/ed25519';
 import jwt, { type JwtHeader, type JwtPayload } from 'jsonwebtoken';
-import { verifyI2H2AVP } from '../src/index';
+import { verifyI2H2APresentation } from '../src/index';
 import { resolveDidDocument } from '../src/resolve-did';
 import {
   extractVpPayloadFromJwt,
@@ -56,7 +56,7 @@ function base64UrlEncode(data: Buffer | Uint8Array): string {
     .replace(/\//g, '_');
 }
 
-function buildDidKeyFromEd25519PublicKey(publicKey: Uint8Array): string {
+function buildDidKeyFromP256PublicKey(publicKey: Uint8Array): string {
   const prefixed = new Uint8Array(MULTICODEC_ED25519_PUB.length + publicKey.length);
   prefixed.set(MULTICODEC_ED25519_PUB, 0);
   prefixed.set(publicKey, MULTICODEC_ED25519_PUB.length);
@@ -64,10 +64,10 @@ function buildDidKeyFromEd25519PublicKey(publicKey: Uint8Array): string {
 }
 
 /**
- * Build a compact JWS (EdDSA / Ed25519). `jsonwebtoken.sign` rejects EdDSA in its options validator,
+ * Build a compact JWS (ES256 / P-256). `jsonwebtoken.sign` signs ES256 directly,
  * so we sign the signing input with @noble/ed25519 and still use `jsonwebtoken` only to sanity-check parsing.
  */
-async function signVpJwtEdDsa(
+async function signVpJwtEs256(
   header: Record<string, string>,
   payload: Record<string, unknown>,
   secretKey: Uint8Array
@@ -310,7 +310,7 @@ async function main(): Promise<void> {
     try {
       agentSecretKey = ed.utils.randomPrivateKey();
       const publicKey = await ed.getPublicKeyAsync(agentSecretKey);
-      summary.agentDid = buildDidKeyFromEd25519PublicKey(publicKey);
+      summary.agentDid = buildDidKeyFromP256PublicKey(publicKey);
       console.log(`✓ Agent did:key generated: ${summary.agentDid}`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -354,7 +354,7 @@ async function main(): Promise<void> {
           validFrom,
           validUntil,
           credentialStatus: {
-            type: 'StatusList2021Entry',
+            type: 'BitstringStatusListEntry',
             statusPurpose: 'revocation',
             ...(process.env.CHEQD_STATUS_LIST_NAME
               ? { statusListName: process.env.CHEQD_STATUS_LIST_NAME.trim() }
@@ -400,13 +400,13 @@ async function main(): Promise<void> {
       return;
     }
 
-    // --- 4. VP JWT signed by agent (Ed25519 / EdDSA via @noble/ed25519) ---
+    // --- 4. Presentation JWT signed by agent (P-256 / ES256) ---
     let vpJwt: string;
     try {
       const nowSec = Math.floor(Date.now() / 1000);
       const vpBody = {
         '@context': ['https://www.w3.org/2018/credentials/v1'],
-        type: ['VerifiablePresentation'],
+        type: ['string'],
         holder: agentDid,
         verifiableCredential: [i2h2aCredentialJwt],
       };
@@ -420,12 +420,12 @@ async function main(): Promise<void> {
       };
 
       const header = {
-        alg: 'EdDSA',
+        alg: 'ES256',
         typ: 'JWT',
         kid: `${agentDid}#key-1`,
       };
 
-      vpJwt = await signVpJwtEdDsa(header, vpPayload, agentSecretKey!);
+      vpJwt = await signVpJwtEs256(header, vpPayload, agentSecretKey!);
       console.log('✓ VP constructed and signed by agent');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -488,16 +488,16 @@ async function main(): Promise<void> {
         console.error(JSON.stringify(resolveErr, Object.getOwnPropertyNames(resolveErr as object), 2));
       }
 
-      console.log('\n--- Step 5: verifyI2H2AVP ---');
-      let result: Awaited<ReturnType<typeof verifyI2H2AVP>>;
+      console.log('\n--- Step 5: verifyI2H2APresentation ---');
+      let result: Awaited<ReturnType<typeof verifyI2H2APresentation>>;
       try {
-        result = await verifyI2H2AVP(vpJwt, {
+        result = await verifyI2H2APresentation(vpJwt, {
           mcpServerId: 'amazon-mcp',
           taskType: 'product_search',
           ...(skipStatus ? { skipStatusCheck: true } : {}),
         });
       } catch (verifyErr: unknown) {
-        console.error('verifyI2H2AVP threw an exception:');
+        console.error('verifyI2H2APresentation threw an exception:');
         if (verifyErr instanceof Error && verifyErr.message) {
           console.error('message:', verifyErr.message);
         }

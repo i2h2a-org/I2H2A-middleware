@@ -2,7 +2,7 @@ import * as crypto from 'crypto';
 import jwt, { type SignOptions } from 'jsonwebtoken';
 import { checkCredentialStatus } from '../src/check-status';
 import { resolveDidDocument } from '../src/resolve-did';
-import { verifyI2H2AVP } from '../src/verify-vp';
+import { verifyI2H2APresentation } from '../src/verify-vp';
 
 jest.mock('../src/resolve-did');
 jest.mock('../src/check-status');
@@ -24,7 +24,7 @@ function makeDidDoc(did: string, publicJwk: crypto.JsonWebKey) {
   };
 }
 
-describe('verifyI2H2AVP', () => {
+describe('verifyI2H2APresentation', () => {
   const holderDid = 'did:key:test-holder';
   const agentDid = 'did:key:test-agent';
 
@@ -103,7 +103,7 @@ describe('verifyI2H2AVP', () => {
     const nowSec = Math.floor(Date.now() / 1000);
     const vpInner = {
       '@context': ['https://www.w3.org/ns/credentials/v2'],
-      type: ['VerifiablePresentation'],
+      type: ['string'],
       holder: agentDid,
       verifiableCredential: [vcJwt],
     };
@@ -127,7 +127,7 @@ describe('verifyI2H2AVP', () => {
 
   it('accepts a valid JWT VP with JWT I2H2A credential (mocked DID + status)', async () => {
     const vpJwt = buildVpJwt(buildVcJwt());
-    const res = await verifyI2H2AVP(vpJwt, { skipStatusCheck: true });
+    const res = await verifyI2H2APresentation(vpJwt, { skipStatusCheck: true });
 
     expect(res.valid).toBe(true);
     expect(res.claims).toMatchObject({
@@ -145,7 +145,7 @@ describe('verifyI2H2AVP', () => {
     let bad: string = buildVpJwt(buildVcJwt());
     bad = `${bad.slice(0, -4)}XXXX`;
 
-    const res = await verifyI2H2AVP(bad, { skipStatusCheck: true });
+    const res = await verifyI2H2APresentation(bad, { skipStatusCheck: true });
     expect(res.valid).toBe(false);
     expect(res.error).toBe('VP signature verification failed');
   });
@@ -153,7 +153,7 @@ describe('verifyI2H2AVP', () => {
   it('rejects an expired I2H2A credential', async () => {
     const nowSec = Math.floor(Date.now() / 1000);
     const vpJwt = buildVpJwt(buildVcJwt({ exp: nowSec - 60 }));
-    const res = await verifyI2H2AVP(vpJwt, { skipStatusCheck: true });
+    const res = await verifyI2H2APresentation(vpJwt, { skipStatusCheck: true });
 
     expect(res.valid).toBe(false);
     expect(res.error).toBe('I2H2A credential expired');
@@ -162,7 +162,7 @@ describe('verifyI2H2AVP', () => {
   it('rejects a revoked credential when status list reports revoked', async () => {
     mockedStatus.mockResolvedValueOnce(false);
     const vpJwt = buildVpJwt(buildVcJwt());
-    const res = await verifyI2H2AVP(vpJwt, { skipStatusCheck: false });
+    const res = await verifyI2H2APresentation(vpJwt, { skipStatusCheck: false });
 
     expect(mockedStatus).toHaveBeenCalled();
     expect(res.valid).toBe(false);
@@ -171,7 +171,7 @@ describe('verifyI2H2AVP', () => {
 
   it('rejects when delegation scope does not match request options', async () => {
     const vpJwt = buildVpJwt(buildVcJwt());
-    const res = await verifyI2H2AVP(vpJwt, {
+    const res = await verifyI2H2APresentation(vpJwt, {
       skipStatusCheck: true,
       mcpServerId: 'other-server',
       taskType: 'read',
@@ -183,7 +183,7 @@ describe('verifyI2H2AVP', () => {
 
   it('rejects when credentialSubject.authorization is missing', async () => {
     const vpJwt = buildVpJwt(buildVcJwt({ authorization: undefined }));
-    const res = await verifyI2H2AVP(vpJwt, { skipStatusCheck: true });
+    const res = await verifyI2H2APresentation(vpJwt, { skipStatusCheck: true });
 
     expect(res.valid).toBe(false);
     expect(res.error).toBe('credentialSubject.authorization is required');
@@ -191,7 +191,7 @@ describe('verifyI2H2AVP', () => {
 
   it('rejects when credentialSubject.delegatedBy is missing', async () => {
     const vpJwt = buildVpJwt(buildVcJwt({ delegatedBy: '' }));
-    const res = await verifyI2H2AVP(vpJwt, { skipStatusCheck: true });
+    const res = await verifyI2H2APresentation(vpJwt, { skipStatusCheck: true });
 
     expect(res.valid).toBe(false);
     expect(res.error).toBe('credentialSubject.delegatedBy is required');

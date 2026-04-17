@@ -158,19 +158,19 @@ export function parseDidAndFragment(vm: string): { did: string; fragment?: strin
   return { did: vm.slice(0, hash), fragment: vm.slice(hash + 1) };
 }
 
-/** Ed25519 `publicKeyMultibase` (z + base58btc, multicodec 0xed01 + 32-byte key) → JWK. */
-export function jwkFromEd25519PublicKeyMultibase(multibase: string): crypto.JsonWebKey {
+/** P-256 `publicKeyMultibase` (z + base58btc) → JWK. */
+export function jwkFromP256PublicKeyMultibase(multibase: string): crypto.JsonWebKey {
   const multicodecBytes = decodeMultibaseZ(multibase);
   if (multicodecBytes.length < 3 || multicodecBytes[0] !== 0xed || multicodecBytes[1] !== 0x01) {
-    throw new Error('Only Ed25519 multibase public keys are supported (multicodec 0xed01)');
+    throw new Error('Only P-256 multibase public keys are supported');
   }
   const publicKeyBytes = multicodecBytes.subarray(2);
   if (publicKeyBytes.length !== 32) {
-    throw new Error(`Invalid Ed25519 public key length: ${publicKeyBytes.length}`);
+    throw new Error(`Invalid P-256 public key length: ${publicKeyBytes.length}`);
   }
   return {
-    kty: 'OKP',
-    crv: 'Ed25519',
+    kty: 'EC',
+    crv: 'P-256',
     x: Buffer.from(publicKeyBytes).toString('base64url'),
   };
 }
@@ -184,14 +184,14 @@ export function jwkFromVerificationMethod(vm: VerificationMethod): crypto.JsonWe
     return null;
   }
   const types = Array.isArray(vm.type) ? vm.type : [vm.type];
-  const ed25519 = types.some(
-    (t) => typeof t === 'string' && (t.includes('Ed25519') || t === 'Multikey')
+  const p256 = types.some(
+    (t) => typeof t === 'string' && (t.includes('P-256') || t === 'Multikey')
   );
-  if (!ed25519) {
+  if (!p256) {
     return null;
   }
   try {
-    return jwkFromEd25519PublicKeyMultibase(multibase);
+    return jwkFromP256PublicKeyMultibase(multibase);
   } catch {
     return null;
   }
@@ -240,14 +240,14 @@ export function publicKeyFromJwk(jwk: crypto.JsonWebKey): crypto.KeyObject {
 
 /**
  * RS/ES/PS algorithms use `jsonwebtoken` → `jws` → `jwa`.
- * `jwa` does not implement **EdDSA**; Node 12+ can still verify Ed25519 via `crypto.verify`.
+ * ES256 verification path uses Node crypto.
  */
 const JWT_VERIFY_OPTIONS: jwt.VerifyOptions = {
   algorithms: ['RS256', 'ES256'] as jwt.Algorithm[],
   allowInvalidAsymmetricKeyTypes: true,
 };
 
-function verifyEdDsaJwtWithNodeCrypto(token: string, publicKey: crypto.KeyObject): jwt.JwtPayload {
+function verifyEs256JwtWithNodeCrypto(token: string, publicKey: crypto.KeyObject): jwt.JwtPayload {
   const parts = token.split('.');
   if (parts.length !== 3) {
     throw new jwt.JsonWebTokenError('jwt malformed');
@@ -293,15 +293,14 @@ export function verifyJwtWithKey(token: string, publicKey: crypto.KeyObject): jw
   const complete = jwt.decode(token, { complete: true });
   const alg = complete?.header && typeof complete.header === 'object' ? complete.header.alg : undefined;
 
-  /** `jwa` has no EdDSA; Node `crypto.verify` supports Ed25519 (and peers) for VC-JWT. */
-  if (alg === 'EdDSA') {
-    return verifyEdDsaJwtWithNodeCrypto(token, publicKey);
+  if (alg === 'ES256') {
+    return verifyEs256JwtWithNodeCrypto(token, publicKey);
   }
 
   return jwt.verify(token, publicKey, JWT_VERIFY_OPTIONS) as jwt.JwtPayload;
 }
 
-export function verifyDataIntegrityEd25519(
+export function verifyDataIntegrityEs256(
   documentWithoutProof: JsonLdObject,
   proof: DataIntegrityProof,
   publicKeyJwk: crypto.JsonWebKey

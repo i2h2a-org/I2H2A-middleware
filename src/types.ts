@@ -133,7 +133,7 @@ export interface I2H2ACredential extends VerifiableCredential<I2H2ACredentialSub
 /**
  * Verifiable Presentation 2.0 (holder, optional domain/challenge, embedded credentials, proof).
  */
-export interface VerifiablePresentation extends JsonLdObject {
+export interface PresentationObject extends JsonLdObject {
   '@context': JsonLdContext;
   id?: UriString;
   type: string | string[];
@@ -145,8 +145,8 @@ export interface VerifiablePresentation extends JsonLdObject {
   proof?: DataIntegrityProof | DataIntegrityProof[];
 }
 
-/** Compact JWT VP (OIDC / OID4VP style) or JSON-LD presentation object. */
-export type VerifiablePresentationInput = VerifiablePresentation | string;
+/** Primary verification input is SD-JWT+KB compact serialisation string. */
+export type PresentationInput = string;
 
 /** W3C DID Core verification method. */
 export interface VerificationMethod extends JsonLdObject {

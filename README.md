@@ -76,7 +76,7 @@ Checks Bitstring Status List revocation status for the given `credentialStatus` 
 
 ## Credential format
 
-This middleware verifies **SD-JWT VC** credentials (RFC 9901) with **ES256/P-256** signatures only. JWT-VC format (v0.1) is not supported in v0.2+.
+This middleware verifies **SD-JWT VC** credentials (RFC 9901) with **ES256/P-256** signatures only. SD-JWT VC format (v0.1) is not supported in v0.2+.
 
 ## I2H2A specification
 

@@ -5,8 +5,7 @@ import type {
   I2H2ACredential,
   I2H2ACredentialSubject,
   JsonLdObject,
-  VerifiablePresentation,
-  VerifiablePresentationInput,
+  PresentationInput,
   VerificationResult,
   VerifyOptions,
 } from './types';
@@ -27,7 +26,7 @@ import {
   pickSigningJwk,
   publicKeyFromJwk,
   stripProof,
-  verifyDataIntegrityEd25519,
+  verifyDataIntegrityEs256,
   verifyJwtWithKey,
 } from './verify-helpers';
 
@@ -40,7 +39,7 @@ function firstCredentialSubject(cred: I2H2ACredential): I2H2ACredentialSubject {
 }
 
 async function verifyJsonLdVpProof(
-  vp: VerifiablePresentation,
+  vp: Record<string, unknown>,
   resolverUrl?: string
 ): Promise<void> {
   const proof = firstProof(vp.proof);
@@ -52,7 +51,7 @@ async function verifyJsonLdVpProof(
   const { did: signerDid } = parseDidAndFragment(vm);
   const agentDoc = await resolveDidDocument(signerDid, resolverUrl);
   const jwk = findVerificationMethod(agentDoc, vm) ?? pickSigningJwk(agentDoc, signerDid, undefined);
-  verifyDataIntegrityEd25519(stripProof(vp) as JsonLdObject, proof, jwk);
+  verifyDataIntegrityEs256(stripProof(vp) as JsonLdObject, proof, jwk);
 }
 
 async function verifyJwtVpSignature(
@@ -121,7 +120,7 @@ async function verifyI2H2ACredentialSignature(
     throw new Error('Could not resolve issuer verification method for credential');
   }
 
-  verifyDataIntegrityEd25519(stripProof(cred) as JsonLdObject, proof, jwk);
+  verifyDataIntegrityEs256(stripProof(cred) as JsonLdObject, proof, jwk);
   return { credential: cred };
 }
 
@@ -173,11 +172,10 @@ function buildClaims(
 }
 
 /**
- * Verify an I2H2A Verifiable Presentation (OID4VP-style delivery).
- * Supports JSON-LD and compact JWT VPs; JWT and JSON-LD credentials.
+ * Verify an I2H2A presentation input.
  */
-export async function verifyI2H2AVP(
-  vpInput: VerifiablePresentationInput,
+export async function verifyI2H2APresentation(
+  vpInput: PresentationInput,
   options?: VerifyOptions
 ): Promise<VerificationResult> {
   let vpPayload: Record<string, unknown>;
@@ -197,15 +195,15 @@ export async function verifyI2H2AVP(
     }
     vpHolder = holder;
   } else {
-    const vp = vpInput as VerifiablePresentation;
+    const vp = vpInput as unknown as Record<string, unknown>;
     if (!vp || typeof vp !== 'object') {
       return { valid: false, error: 'Invalid Verifiable Presentation: expected object or JWT string' };
     }
 
     const types = vp.type;
     const typeArr = Array.isArray(types) ? types : types != null ? [types] : [];
-    if (!typeArr.includes('VerifiablePresentation')) {
-      return { valid: false, error: 'VP must include type VerifiablePresentation' };
+    if (!typeArr.includes('string')) {
+      return { valid: false, error: 'VP must include type string' };
     }
 
     if (!vp.holder || typeof vp.holder !== 'string') {

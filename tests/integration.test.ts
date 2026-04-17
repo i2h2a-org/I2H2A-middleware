@@ -2,7 +2,7 @@ import * as crypto from 'crypto';
 import jwt, { type SignOptions } from 'jsonwebtoken';
 import { checkCredentialStatus } from '../src/check-status';
 import { resolveDidDocument } from '../src/resolve-did';
-import { verifyI2H2AVP } from '../src/verify-vp';
+import { verifyI2H2APresentation } from '../src/verify-vp';
 
 jest.mock('../src/resolve-did');
 jest.mock('../src/check-status');
@@ -114,7 +114,7 @@ describe('integration (mocked resolver and status)', () => {
     const nowSec = Math.floor(Date.now() / 1000);
     const vpInner: Record<string, unknown> = {
       '@context': ['https://www.w3.org/ns/credentials/v2'],
-      type: ['VerifiablePresentation'],
+      type: ['string'],
       holder: agentDid,
     };
     if (opts?.includeVcArray !== false) {
@@ -144,7 +144,7 @@ describe('integration (mocked resolver and status)', () => {
 
   it('valid VP with matching mcpServerId and taskType returns valid=true with correct claims', async () => {
     const vpJwt = buildVpJwt(buildVcJwt());
-    const res = await verifyI2H2AVP(vpJwt, {
+    const res = await verifyI2H2APresentation(vpJwt, {
       mcpServerId: 'allowed-server',
       taskType: 'read-only',
     });
@@ -160,14 +160,14 @@ describe('integration (mocked resolver and status)', () => {
 
   it('valid VP with no scope options passed returns valid=true', async () => {
     const vpJwt = buildVpJwt(buildVcJwt());
-    const res = await verifyI2H2AVP(vpJwt);
+    const res = await verifyI2H2APresentation(vpJwt);
 
     expect(res.valid).toBe(true);
   });
 
   it('VP with mismatched mcpServerId returns valid=false', async () => {
     const vpJwt = buildVpJwt(buildVcJwt());
-    const res = await verifyI2H2AVP(vpJwt, {
+    const res = await verifyI2H2APresentation(vpJwt, {
       mcpServerId: 'different-server',
       taskType: 'read-only',
     });
@@ -178,7 +178,7 @@ describe('integration (mocked resolver and status)', () => {
 
   it('VP with mismatched taskType returns valid=false', async () => {
     const vpJwt = buildVpJwt(buildVcJwt());
-    const res = await verifyI2H2AVP(vpJwt, {
+    const res = await verifyI2H2APresentation(vpJwt, {
       mcpServerId: 'allowed-server',
       taskType: 'write',
     });
@@ -190,7 +190,7 @@ describe('integration (mocked resolver and status)', () => {
   it('VP with revoked credential returns valid=false', async () => {
     mockedStatus.mockResolvedValueOnce(false);
     const vpJwt = buildVpJwt(buildVcJwt());
-    const res = await verifyI2H2AVP(vpJwt);
+    const res = await verifyI2H2APresentation(vpJwt);
 
     expect(res.valid).toBe(false);
     expect(res.error).toBe('I2H2A credential revoked');
@@ -199,7 +199,7 @@ describe('integration (mocked resolver and status)', () => {
   it('VP with expired credential returns valid=false', async () => {
     const nowSec = Math.floor(Date.now() / 1000);
     const vpJwt = buildVpJwt(buildVcJwt({ exp: nowSec - 60 }));
-    const res = await verifyI2H2AVP(vpJwt);
+    const res = await verifyI2H2APresentation(vpJwt);
 
     expect(res.valid).toBe(false);
     expect(res.error).toBe('I2H2A credential expired');
@@ -207,7 +207,7 @@ describe('integration (mocked resolver and status)', () => {
 
   it('VP with invalid signature returns valid=false', async () => {
     const vpJwt = buildVpJwt(buildVcJwt(), { signWithWrongKey: true });
-    const res = await verifyI2H2AVP(vpJwt);
+    const res = await verifyI2H2APresentation(vpJwt);
 
     expect(res.valid).toBe(false);
     expect(res.error).toBe('VP signature verification failed');
@@ -215,7 +215,7 @@ describe('integration (mocked resolver and status)', () => {
 
   it('VP missing verifiableCredential array returns valid=false', async () => {
     const vpJwt = buildVpJwt(buildVcJwt(), { includeVcArray: false });
-    const res = await verifyI2H2AVP(vpJwt);
+    const res = await verifyI2H2APresentation(vpJwt);
 
     expect(res.valid).toBe(false);
     expect(res.error).toBe('VP must contain verifiableCredential array');
@@ -223,7 +223,7 @@ describe('integration (mocked resolver and status)', () => {
 
   it('VP with wrong credential type (not I2H2A) returns valid=false', async () => {
     const vpJwt = buildVpJwt(buildVcJwt({ types: ['VerifiableCredential', 'OtherType'] }));
-    const res = await verifyI2H2AVP(vpJwt);
+    const res = await verifyI2H2APresentation(vpJwt);
 
     expect(res.valid).toBe(false);
     expect(res.error).toBe('No I2H2A credential in VP');
@@ -231,7 +231,7 @@ describe('integration (mocked resolver and status)', () => {
 
   it('VP with delegationDepth != 0 returns valid=false', async () => {
     const vpJwt = buildVpJwt(buildVcJwt({ delegationDepth: 1 }));
-    const res = await verifyI2H2AVP(vpJwt);
+    const res = await verifyI2H2APresentation(vpJwt);
 
     expect(res.valid).toBe(false);
     expect(res.error).toBe('Invalid delegation depth (must be 0 for V1)');
@@ -239,7 +239,7 @@ describe('integration (mocked resolver and status)', () => {
 
   it('VP with parentCredential != null returns valid=false', async () => {
     const vpJwt = buildVpJwt(buildVcJwt({ parentCredential: 'urn:vc:parent:1' }));
-    const res = await verifyI2H2AVP(vpJwt);
+    const res = await verifyI2H2APresentation(vpJwt);
 
     expect(res.valid).toBe(false);
     expect(res.error).toBe('Parent credential must be null for H2A (V1)');
@@ -247,7 +247,7 @@ describe('integration (mocked resolver and status)', () => {
 
   it('VP returns error when credentialSubject.authorization is absent', async () => {
     const vpJwt = buildVpJwt(buildVcJwt({ authorization: undefined }));
-    const res = await verifyI2H2AVP(vpJwt);
+    const res = await verifyI2H2APresentation(vpJwt);
 
     expect(res.valid).toBe(false);
     expect(res.error).toBe('credentialSubject.authorization is required');
@@ -255,7 +255,7 @@ describe('integration (mocked resolver and status)', () => {
 
   it('VP returns error when credentialSubject.delegatedBy is absent', async () => {
     const vpJwt = buildVpJwt(buildVcJwt({ delegatedBy: '' }));
-    const res = await verifyI2H2AVP(vpJwt);
+    const res = await verifyI2H2APresentation(vpJwt);
 
     expect(res.valid).toBe(false);
     expect(res.error).toBe('credentialSubject.delegatedBy is required');

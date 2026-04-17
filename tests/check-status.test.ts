@@ -21,7 +21,7 @@ function makeCredential(statusOverride?: Partial<CredentialStatus>): I2H2ACreden
     },
     credentialStatus: {
       id: 'https://example.com/status/1#0',
-      type: 'StatusList2021Entry',
+      type: 'BitstringStatusListEntry',
       statusListCredential: 'https://example.com/status/1',
       statusListIndex: '0',
       ...(statusOverride ?? {}),

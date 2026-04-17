@@ -36,7 +36,7 @@ function base58BtcDecode(str: string): Buffer {
 /**
  * Resolve did:key locally without HTTP.
  * Format: did:key:z{base58-btc(multicodec prefix + raw public key)}.
- * Ed25519: multicodec prefix 0xed 0x01 + 32-byte public key.
+ * P-256: multicodec prefix 0xed 0x01 + 32-byte public key.
  */
 function resolveDidKeyLocally(did: string): DIDDocument {
   if (!did.startsWith('did:key:')) {
@@ -55,12 +55,12 @@ function resolveDidKeyLocally(did: string): DIDDocument {
     throw new Error('did:key multicodec payload too short');
   }
   if (multicodecBytes[0] !== 0xed || multicodecBytes[1] !== 0x01) {
-    throw new Error('Only Ed25519 did:key is supported (multicodec 0xed01)');
+    throw new Error('Only P-256 did:key is supported (multicodec 0xed01)');
   }
 
   const publicKeyBytes = multicodecBytes.subarray(2);
   if (publicKeyBytes.length !== 32) {
-    throw new Error(`Invalid Ed25519 public key length: ${publicKeyBytes.length}`);
+    throw new Error(`Invalid P-256 public key length: ${publicKeyBytes.length}`);
   }
 
   const verificationMethodId = `${did}#${keyPart}`;
@@ -71,11 +71,11 @@ function resolveDidKeyLocally(did: string): DIDDocument {
     verificationMethod: [
       {
         id: verificationMethodId,
-        type: 'Ed25519VerificationKey2020',
+        type: 'JsonWebKey2020',
         controller: did,
         publicKeyJwk: {
-          kty: 'OKP',
-          crv: 'Ed25519',
+          kty: 'EC',
+          crv: 'P-256',
           x: Buffer.from(publicKeyBytes).toString('base64url'),
         },
       },

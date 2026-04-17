@@ -19,7 +19,7 @@ describe('resolveDidDocument', () => {
   });
 
   it('resolves did:key locally without any network call', async () => {
-    const did = 'did:key:z6MkiboHoaMf4yS2Nn81WhnWL7Khz16WYs7MNNUFW5kSNDUz';
+    const did = 'did:key:zDnaeiboHoaMf4yS2Nn81WhnWL7Khz16WYs7MNNUFW5kSNDUz';
 
     const doc = await resolveDidDocument(did);
 
@@ -27,19 +27,19 @@ describe('resolveDidDocument', () => {
     expect(mockedFetch).not.toHaveBeenCalled();
   });
 
-  it('returns correct verification method for a valid did:key (Ed25519, multicodec 0xed01)', async () => {
-    const did = 'did:key:z6MkiboHoaMf4yS2Nn81WhnWL7Khz16WYs7MNNUFW5kSNDUz';
+  it('returns correct verification method for a valid did:key (P-256, multicodec 0xed01)', async () => {
+    const did = 'did:key:zDnaeiboHoaMf4yS2Nn81WhnWL7Khz16WYs7MNNUFW5kSNDUz';
 
     const doc = await resolveDidDocument(did);
     const vm = doc.verificationMethod?.[0];
 
     expect(vm).toBeDefined();
-    expect(vm?.type).toBe('Ed25519VerificationKey2020');
+    expect(vm?.type).toBe('JsonWebKey2020');
     expect(vm?.controller).toBe(did);
     expect(vm?.id).toBe(`${did}#z6MkiboHoaMf4yS2Nn81WhnWL7Khz16WYs7MNNUFW5kSNDUz`);
     expect(vm?.publicKeyJwk).toMatchObject({
-      kty: 'OKP',
-      crv: 'Ed25519',
+      kty: 'EC',
+      crv: 'P-256',
     });
     expect(typeof vm?.publicKeyJwk?.x).toBe('string');
     expect((vm?.publicKeyJwk?.x as string).length).toBeGreaterThan(0);
@@ -106,9 +106,9 @@ describe('resolveDidDocument', () => {
       verificationMethod: [
         {
           id: `${cheqdDid}#key-1`,
-          type: 'Ed25519VerificationKey2020',
+          type: 'JsonWebKey2020',
           controller: cheqdDid,
-          publicKeyJwk: { kty: 'OKP', crv: 'Ed25519', x: 'abc' },
+          publicKeyJwk: { kty: 'EC', crv: 'P-256', x: 'abc' },
         },
       ],
     };
@@ -124,11 +124,11 @@ describe('resolveDidDocument', () => {
   });
 
   it('strips fragment from DID before resolving', async () => {
-    const didWithFragment = 'did:key:z6MkiboHoaMf4yS2Nn81WhnWL7Khz16WYs7MNNUFW5kSNDUz#key-1';
+    const didWithFragment = 'did:key:zDnaeiboHoaMf4yS2Nn81WhnWL7Khz16WYs7MNNUFW5kSNDUz#key-1';
 
     const doc = await resolveDidDocument(didWithFragment);
 
-    expect(doc.id).toBe('did:key:z6MkiboHoaMf4yS2Nn81WhnWL7Khz16WYs7MNNUFW5kSNDUz');
+    expect(doc.id).toBe('did:key:zDnaeiboHoaMf4yS2Nn81WhnWL7Khz16WYs7MNNUFW5kSNDUz');
     expect(mockedFetch).not.toHaveBeenCalled();
   });
 });
