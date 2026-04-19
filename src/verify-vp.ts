@@ -1,268 +1,167 @@
-import jwt, { type JwtHeader } from 'jsonwebtoken';
+import * as crypto from 'crypto';
 import { checkCredentialStatus } from './check-status';
 import { resolveDidDocument } from './resolve-did';
 import type {
-  I2H2ACredential,
-  I2H2ACredentialSubject,
-  JsonLdObject,
-  PresentationInput,
+  I2H2ADisclosedClaims,
+  I2H2AIssuerPayload,
+  KbJwtPayload,
+  P256Jwk,
   VerificationResult,
   VerifyOptions,
 } from './types';
 import { validateDelegationScope } from './validate-scope';
 import {
-  credentialTypes,
-  credentialValidityWindow,
-  decodeJwtVc,
-  detectCredentialFormat,
-  ensureVerifiableCredentialArray,
-  extractIssuerDid,
-  extractVpPayloadFromJwt,
-  findVerificationMethod,
-  firstProof,
-  hasI2H2AType,
-  isJwtPresentation,
-  parseDidAndFragment,
-  pickSigningJwk,
-  publicKeyFromJwk,
-  stripProof,
-  verifyDataIntegrityEs256,
-  verifyJwtWithKey,
+  b64urlDecode,
+  decodeDisclosure,
+  decodeJwtPart,
+  parseSdJwtKb,
+  sha256Base64url,
+  splitJwt,
+  verifyEs256Signature,
 } from './verify-helpers';
 
-function firstCredentialSubject(cred: I2H2ACredential): I2H2ACredentialSubject {
-  const cs = cred.credentialSubject;
-  if (Array.isArray(cs)) {
-    return cs[0] as I2H2ACredentialSubject;
+function safeEqualString(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a, 'utf8');
+  const bBuf = Buffer.from(b, 'utf8');
+  if (aBuf.length !== bBuf.length) {
+    return false;
   }
-  return cs as I2H2ACredentialSubject;
+  return crypto.timingSafeEqual(aBuf, bBuf);
 }
 
-async function verifyJsonLdVpProof(
-  vp: Record<string, unknown>,
-  resolverUrl?: string
-): Promise<void> {
-  const proof = firstProof(vp.proof);
-  if (!proof?.verificationMethod) {
-    throw new Error('VP must have proof object with verificationMethod');
-  }
-
-  const vm = proof.verificationMethod;
-  const { did: signerDid } = parseDidAndFragment(vm);
-  const agentDoc = await resolveDidDocument(signerDid, resolverUrl);
-  const jwk = findVerificationMethod(agentDoc, vm) ?? pickSigningJwk(agentDoc, signerDid, undefined);
-  verifyDataIntegrityEs256(stripProof(vp) as JsonLdObject, proof, jwk);
-}
-
-async function verifyJwtVpSignature(
-  token: string,
-  resolverUrl?: string
-): Promise<{ vpPayload: Record<string, unknown>; jwtPayload: jwt.JwtPayload }> {
-  const decoded = jwt.decode(token, { complete: true });
-  if (!decoded || typeof decoded !== 'object' || !('payload' in decoded)) {
-    throw new Error('Invalid JWT VP');
-  }
-  const payload = decoded.payload as jwt.JwtPayload;
-  const header = decoded.header as JwtHeader;
-  const iss = payload.iss;
-  if (!iss || typeof iss !== 'string') {
-    throw new Error('JWT VP must include iss (signer DID)');
-  }
-
-  const { did: issuerDid } = parseDidAndFragment(iss);
-  const issuerDoc = await resolveDidDocument(issuerDid, resolverUrl);
-  const kid = header.kid;
-  const jwk = pickSigningJwk(issuerDoc, issuerDid, typeof kid === 'string' ? kid : undefined);
-  verifyJwtWithKey(token, publicKeyFromJwk(jwk));
-
-  const vpPayload = extractVpPayloadFromJwt(payload);
-  return { vpPayload, jwtPayload: payload };
-}
-
-async function verifyI2H2ACredentialSignature(
-  raw: unknown,
-  resolverUrl?: string
-): Promise<{ credential: I2H2ACredential; jwtEnvelope?: jwt.JwtPayload }> {
-  if (detectCredentialFormat(raw) === 'jwt') {
-    const token = raw as string;
-    const decoded = jwt.decode(token, { complete: true });
-    if (!decoded || typeof decoded !== 'object' || !('payload' in decoded)) {
-      throw new Error('Invalid credential JWT');
-    }
-    const payload = decoded.payload as jwt.JwtPayload;
-    const header = decoded.header as JwtHeader;
-    const iss = payload.iss;
-    if (!iss || typeof iss !== 'string') {
-      throw new Error('Credential JWT must include iss (holder DID)');
-    }
-
-    const { did: holderDid } = parseDidAndFragment(iss);
-    const holderDoc = await resolveDidDocument(holderDid, resolverUrl);
-    const kid = header.kid;
-    const jwk = pickSigningJwk(holderDoc, holderDid, typeof kid === 'string' ? kid : undefined);
-    verifyJwtWithKey(token, publicKeyFromJwk(jwk));
-
-    const credential = decodeJwtVc(token);
-    return { credential, jwtEnvelope: payload };
-  }
-
-  const cred = raw as I2H2ACredential;
-  const proof = firstProof(cred.proof);
-  if (!proof?.verificationMethod) {
-    throw new Error('JSON-LD credential must include proof with verificationMethod');
-  }
-
-  const issuerDid = extractIssuerDid(cred);
-  const { did: issuerBase } = parseDidAndFragment(issuerDid);
-  const issuerDoc = await resolveDidDocument(issuerBase, resolverUrl);
-  const jwk = findVerificationMethod(issuerDoc, proof.verificationMethod);
-  if (!jwk) {
-    throw new Error('Could not resolve issuer verification method for credential');
-  }
-
-  verifyDataIntegrityEs256(stripProof(cred) as JsonLdObject, proof, jwk);
-  return { credential: cred };
-}
-
-function checkCredentialExpiry(
-  credential: I2H2ACredential,
-  jwtEnvelope?: jwt.JwtPayload
-): VerificationResult | null {
-  const { start, end } = credentialValidityWindow(credential, jwtEnvelope);
-  const now = Date.now();
-
-  if (start != null && now < start) {
-    return { valid: false, error: 'I2H2A credential not yet valid' };
-  }
-  if (end != null && now > end) {
-    return { valid: false, error: 'I2H2A credential expired' };
-  }
-  return null;
-}
-
-function validateV1Rules(credential: I2H2ACredential): VerificationResult | null {
-  const subject = firstCredentialSubject(credential);
-  if (subject.authorization == null) {
-    return { valid: false, error: 'credentialSubject.authorization is required' };
-  }
-  if (typeof subject.delegatedBy !== 'string' || subject.delegatedBy.trim() === '') {
-    return { valid: false, error: 'credentialSubject.delegatedBy is required' };
-  }
-  if (subject.delegationDepth !== 0) {
-    return { valid: false, error: 'Invalid delegation depth (must be 0 for V1)' };
-  }
-  if (subject.parentCredential != null) {
-    return { valid: false, error: 'Parent credential must be null for H2A (V1)' };
-  }
-  return null;
-}
-
-function buildClaims(
-  credential: I2H2ACredential,
-  vpHolder: string,
-  credentialIssuerDid: string
-): Record<string, unknown> {
-  const subject = firstCredentialSubject(credential);
-  return {
-    agentDid: vpHolder || subject.id,
-    holderDid: credentialIssuerDid,
-    scope: subject.scope,
-    authorization: subject.authorization,
-  };
-}
-
-/**
- * Verify an I2H2A presentation input.
- */
 export async function verifyI2H2APresentation(
-  vpInput: PresentationInput,
-  options?: VerifyOptions
+  token: string,
+  options: VerifyOptions
 ): Promise<VerificationResult> {
-  let vpPayload: Record<string, unknown>;
-  let vpHolder: string;
-
-  if (isJwtPresentation(vpInput)) {
-    try {
-      const { vpPayload: inner } = await verifyJwtVpSignature(vpInput, options?.resolverUrl);
-      vpPayload = inner;
-    } catch {
-      return { valid: false, error: 'VP signature verification failed' };
-    }
-
-    const holder = vpPayload.holder;
-    if (!holder || typeof holder !== 'string') {
-      return { valid: false, error: 'VP payload must include holder (DID string)' };
-    }
-    vpHolder = holder;
-  } else {
-    const vp = vpInput as unknown as Record<string, unknown>;
-    if (!vp || typeof vp !== 'object') {
-      return { valid: false, error: 'Invalid Verifiable Presentation: expected object or JWT string' };
-    }
-
-    const types = vp.type;
-    const typeArr = Array.isArray(types) ? types : types != null ? [types] : [];
-    if (!typeArr.includes('string')) {
-      return { valid: false, error: 'VP must include type string' };
-    }
-
-    if (!vp.holder || typeof vp.holder !== 'string') {
-      return { valid: false, error: 'VP must include holder (DID string)' };
-    }
-
-    try {
-      await verifyJsonLdVpProof(vp, options?.resolverUrl);
-    } catch {
-      return { valid: false, error: 'VP signature verification failed' };
-    }
-
-    vpPayload = vp as unknown as Record<string, unknown>;
-    vpHolder = vp.holder;
+  let issuerJwt: string;
+  let disclosures: string[];
+  let kbJwt: string;
+  try {
+    const parsed = parseSdJwtKb(token);
+    issuerJwt = parsed.issuerJwt;
+    disclosures = parsed.disclosures;
+    kbJwt = parsed.kbJwt;
+  } catch {
+    return { valid: false, error: 'Invalid SD-JWT+KB format' };
   }
 
-  const vcArray = ensureVerifiableCredentialArray(vpPayload);
-  if (!vcArray) {
-    return { valid: false, error: 'VP must contain verifiableCredential array' };
+  const issuerParts = splitJwt(issuerJwt);
+  if (!issuerParts) {
+    return { valid: false, error: 'Invalid issuer JWT' };
+  }
+  const [issuerHeaderB64, issuerPayloadB64] = issuerParts;
+  const issuerHeader = decodeJwtPart(issuerHeaderB64);
+  if (issuerHeader == null || typeof issuerHeader !== 'object') {
+    return { valid: false, error: 'Invalid issuer JWT header' };
+  }
+  const issuerPayload = decodeJwtPart(issuerPayloadB64) as I2H2AIssuerPayload;
+
+  if (issuerPayload.vct !== 'I2H2A') {
+    return { valid: false, error: 'Invalid vct (expected I2H2A)' };
+  }
+  if (issuerPayload._sd_alg !== 'sha-256') {
+    return { valid: false, error: 'Invalid _sd_alg (expected sha-256)' };
   }
 
-  let rawI2H2A: unknown;
-  for (const item of vcArray) {
-    if (hasI2H2AType(item)) {
-      rawI2H2A = item;
+  let issuerDidDoc;
+  try {
+    issuerDidDoc = await resolveDidDocument(issuerPayload.iss, options.resolverUrl);
+  } catch {
+    return { valid: false, error: 'Issuer DID resolution failed' };
+  }
+
+  let issuerJwk: P256Jwk | null = null;
+  for (const vm of issuerDidDoc.verificationMethod ?? []) {
+    const maybeJwk = vm.publicKeyJwk;
+    if (
+      maybeJwk &&
+      typeof maybeJwk === 'object' &&
+      maybeJwk.crv === 'P-256' &&
+      maybeJwk.kty === 'EC' &&
+      typeof maybeJwk.x === 'string' &&
+      typeof maybeJwk.y === 'string'
+    ) {
+      issuerJwk = maybeJwk as P256Jwk;
       break;
     }
   }
-  if (rawI2H2A === undefined) {
-    return { valid: false, error: 'No I2H2A credential in VP' };
+  if (!issuerJwk) {
+    return { valid: false, error: 'No P-256 key in issuer DID document' };
   }
 
-  let credential: I2H2ACredential;
-  let credJwtEnv: jwt.JwtPayload | undefined;
-
-  try {
-    const out = await verifyI2H2ACredentialSignature(rawI2H2A, options?.resolverUrl);
-    credential = out.credential;
-    credJwtEnv = out.jwtEnvelope;
-  } catch (e) {
-    if (e instanceof jwt.TokenExpiredError) {
-      return { valid: false, error: 'I2H2A credential expired' };
-    }
-    if (e instanceof jwt.NotBeforeError) {
-      return { valid: false, error: 'I2H2A credential not yet valid' };
-    }
-    return { valid: false, error: 'I2H2A credential signature verification failed' };
+  if (!verifyEs256Signature(issuerJwt, issuerJwk)) {
+    return { valid: false, error: 'Issuer JWT signature invalid' };
   }
 
-  const expiryErr = checkCredentialExpiry(credential, credJwtEnv);
-  if (expiryErr) {
-    return expiryErr;
+  const now = Math.floor(Date.now() / 1000);
+  if (issuerPayload.nbf != null && issuerPayload.nbf > now) {
+    return { valid: false, error: 'Issuer JWT not yet valid' };
+  }
+  if (issuerPayload.exp <= now) {
+    return { valid: false, error: 'Issuer JWT expired' };
   }
 
-  if (!options?.skipStatusCheck) {
+  for (const disclosure of disclosures) {
     try {
-      const ok = await checkCredentialStatus(credential);
-      if (!ok) {
-        return { valid: false, error: 'I2H2A credential revoked' };
+      b64urlDecode(disclosure);
+    } catch {
+      return { valid: false, error: 'Invalid disclosure encoding' };
+    }
+    const digest = sha256Base64url(disclosure);
+    if (!issuerPayload._sd.includes(digest)) {
+      return { valid: false, error: 'Disclosure hash mismatch' };
+    }
+  }
+
+  const claims: I2H2ADisclosedClaims = {};
+  for (const disclosure of disclosures) {
+    const tuple = decodeDisclosure(disclosure) as [unknown, unknown, unknown];
+    const key = tuple[1];
+    if (typeof key !== 'string' || key.length === 0) {
+      return { valid: false, error: 'Invalid disclosure claim key' };
+    }
+    const value = tuple[2];
+    (claims as Record<string, unknown>)[key] = value;
+  }
+
+  const sdInput = `${issuerJwt}~${disclosures.join('~')}~`;
+  const sdHash = sha256Base64url(sdInput);
+
+  const kbParts = splitJwt(kbJwt);
+  if (!kbParts) {
+    return { valid: false, error: 'Invalid KB-JWT' };
+  }
+  const [, kbPayloadB64] = kbParts;
+  const kbPayload = decodeJwtPart(kbPayloadB64) as KbJwtPayload;
+  if (!safeEqualString(kbPayload.aud, options.mcpServerId)) {
+    return { valid: false, error: 'KB-JWT aud mismatch' };
+  }
+  if (!safeEqualString(kbPayload.nonce, options.nonce)) {
+    return { valid: false, error: 'KB-JWT nonce mismatch' };
+  }
+  if (!safeEqualString(kbPayload.sd_hash, sdHash)) {
+    return { valid: false, error: 'KB-JWT sd_hash mismatch' };
+  }
+
+  const holderJwk = issuerPayload.cnf.jwk;
+  if (
+    !holderJwk ||
+    holderJwk.kty !== 'EC' ||
+    holderJwk.crv !== 'P-256' ||
+    typeof holderJwk.x !== 'string' ||
+    typeof holderJwk.y !== 'string'
+  ) {
+    return { valid: false, error: 'Invalid holder key in cnf.jwk' };
+  }
+  if (!verifyEs256Signature(kbJwt, holderJwk)) {
+    return { valid: false, error: 'KB-JWT signature invalid' };
+  }
+
+  if (!options.skipStatusCheck && issuerPayload.credentialStatus) {
+    try {
+      const isActive = await checkCredentialStatus(issuerPayload.credentialStatus);
+      if (!isActive) {
+        return { valid: false, error: 'Credential revoked' };
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -270,28 +169,30 @@ export async function verifyI2H2APresentation(
     }
   }
 
-  const scopeRequested =
-    (options?.mcpServerId !== undefined && options.mcpServerId !== '') ||
-    (options?.taskType !== undefined && options.taskType !== '');
-  if (scopeRequested) {
-    const mid = options?.mcpServerId ?? '';
-    const tt = options?.taskType ?? '';
-    if (!mid || !tt) {
-      return {
-        valid: false,
-        error: 'Delegation scope validation requires both mcpServerId and taskType',
-      };
-    }
-    if (!validateDelegationScope(credential, mid, tt)) {
-      return { valid: false, error: 'Delegation scope does not match request' };
-    }
+  if (claims.delegationDepth !== 0) {
+    return { valid: false, error: 'Invalid delegation depth (must be 0 for V1)' };
+  }
+  if (claims.parentCredential !== null && claims.parentCredential !== undefined) {
+    return { valid: false, error: 'Parent credential must be null for H2A (V1)' };
+  }
+  if (typeof claims.delegatedBy !== 'string' || claims.delegatedBy.trim() === '') {
+    return { valid: false, error: 'delegatedBy is required' };
   }
 
-  const v1 = validateV1Rules(credential);
-  if (v1) {
-    return v1;
+  if (!validateDelegationScope(claims, options.mcpServerId)) {
+    return { valid: false, error: 'Delegation scope does not permit this MCP server' };
   }
 
-  const credentialIssuerDid = typeof credJwtEnv?.iss === 'string' ? credJwtEnv.iss : '';
-  return { valid: true, claims: buildClaims(credential, vpHolder, credentialIssuerDid) };
+  return {
+    valid: true,
+    claims: {
+      agentDid: issuerPayload.sub,
+      delegatedBy: claims.delegatedBy as string,
+      scope: {
+        mcpServers: (claims['scope.mcpServers'] ?? []) as string[],
+        taskType: (claims['scope.taskType'] ?? '') as string,
+      },
+      authorization: claims.authorization ?? null,
+    },
+  };
 }

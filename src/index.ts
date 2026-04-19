@@ -4,7 +4,15 @@ export { checkCredentialStatus } from './check-status';
 export { validateDelegationScope } from './validate-scope';
 
 export type {
-  I2H2ACredential,
   VerificationResult,
   VerifyOptions,
+  I2H2AClaims,
+  I2H2ADisclosedClaims,
+  I2H2AIssuerPayload,
+  KbJwtPayload,
+  CredentialStatusEntry,
+  DIDDocument,
+  VerificationMethod,
+  P256Jwk,
+  CnfJwk,
 } from './types';

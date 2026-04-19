@@ -1,410 +1,82 @@
 import * as crypto from 'crypto';
-import jwt from 'jsonwebtoken';
-import type {
-  DataIntegrityProof,
-  DIDDocument,
-  I2H2ACredential,
-  JsonLdObject,
-  VerificationMethod,
-} from './types';
+import type { P256Jwk } from './types';
 
-const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-
-export function detectCredentialFormat(credential: unknown): 'jwt' | 'jsonld' {
-  if (typeof credential === 'string' && credential.startsWith('eyJ')) {
-    return 'jwt';
-  }
-  return 'jsonld';
+export function b64urlDecode(str: string): Buffer {
+  const b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = b64 + '=='.slice(0, (4 - (b64.length % 4)) % 4);
+  return Buffer.from(padded, 'base64');
 }
 
-/** True if `obj.type` includes I2H2A (VC or nested VC object). */
-function recordHasI2H2AType(obj: Record<string, unknown>): boolean {
-  const t = obj.type;
-  const arr = Array.isArray(t) ? t.map(String) : typeof t === 'string' ? [t] : [];
-  if (arr.includes('I2H2A')) {
-    return true;
-  }
-  const cs = obj.credentialSubject;
-  const sub = Array.isArray(cs) ? cs[0] : cs;
-  if (sub && typeof sub === 'object' && !Array.isArray(sub)) {
-    return recordHasI2H2AType(sub as Record<string, unknown>);
-  }
-  return false;
+export function b64urlEncode(buf: Buffer | Uint8Array): string {
+  return Buffer.from(buf).toString('base64url');
 }
 
-/**
- * Some issuers (e.g. cheqd Studio) wrap claims as VC-in-credentialSubject; unwrap to a flat I2H2A shape.
- */
-function jwtPayloadToI2H2ACredential(decoded: Record<string, unknown>): I2H2ACredential {
-  const rootVc = decoded.vc;
-  const vcRoot =
-    rootVc && typeof rootVc === 'object' ? (rootVc as Record<string, unknown>) : decoded;
-
-  let node: Record<string, unknown> = vcRoot;
-  for (let depth = 0; depth < 6; depth++) {
-    const types = credentialTypes(node as I2H2ACredential);
-    if (types.includes('I2H2A')) {
-      let leaf = node.credentialSubject;
-      if (Array.isArray(leaf)) {
-        leaf = leaf[0];
-      }
-      while (
-        leaf &&
-        typeof leaf === 'object' &&
-        !Array.isArray(leaf) &&
-        (leaf as Record<string, unknown>).credentialSubject != null &&
-        (leaf as Record<string, unknown>).scope == null
-      ) {
-        const inner = (leaf as Record<string, unknown>).credentialSubject;
-        leaf = Array.isArray(inner) ? inner[0] : inner;
-      }
-
-      const iss = decoded.iss;
-      const out = {
-        ...node,
-        issuer: typeof iss === 'string' ? iss : node.issuer,
-        credentialSubject: leaf,
-      } as I2H2ACredential;
-      return out;
-    }
-
-    const cs = node.credentialSubject;
-    const next = Array.isArray(cs) ? cs[0] : cs;
-    if (!next || typeof next !== 'object' || Array.isArray(next)) {
-      break;
-    }
-    node = next as Record<string, unknown>;
-  }
-
-  throw new Error('JWT payload has no I2H2A-typed verifiable credential');
+export function decodeJwtPart(part: string): unknown {
+  return JSON.parse(b64urlDecode(part).toString('utf8'));
 }
 
-export function decodeJwtVc(jwtStr: string): I2H2ACredential {
-  const decoded = jwt.decode(jwtStr, { complete: false }) as Record<string, unknown> | null;
-  if (!decoded || typeof decoded !== 'object') {
-    throw new Error('Invalid JWT: could not decode payload');
-  }
-  return jwtPayloadToI2H2ACredential(decoded);
+export function splitJwt(token: string): [string, string, string] {
+  const parts = token.split('.');
+  if (parts.length !== 3) throw new Error(`Invalid JWT: expected 3 parts, got ${parts.length}`);
+  return [parts[0] as string, parts[1] as string, parts[2] as string];
 }
 
-export function firstProof(
-  proof: DataIntegrityProof | DataIntegrityProof[] | undefined
-): DataIntegrityProof | undefined {
-  if (!proof) return undefined;
-  return Array.isArray(proof) ? proof[0] : proof;
+export function verifyEs256Signature(token: string, jwk: P256Jwk): boolean {
+  const [headerB64, payloadB64, sigB64] = splitJwt(token);
+  const signingInput = Buffer.from(`${headerB64}.${payloadB64}`, 'utf8');
+  const sigBytes = b64urlDecode(sigB64);
+  let publicKey: crypto.KeyObject;
+  try {
+    publicKey = crypto.createPublicKey({ key: jwk as unknown as crypto.JsonWebKey, format: 'jwk' });
+  } catch {
+    throw new Error('Failed to import P-256 public key from JWK');
+  }
+  try {
+    const derSig = rawEcdsaToDer(sigBytes);
+    return crypto.verify('SHA256', signingInput, publicKey, derSig);
+  } catch {
+    return false;
+  }
 }
 
-/** Deterministic JSON serialization (JCS-style: sorted keys, no extra whitespace). */
-export function jcsCanonicalize(value: unknown): string {
-  return JSON.stringify(canonicalizeValue(value));
+function rawEcdsaToDer(raw: Buffer): Buffer {
+  if (raw.length !== 64) throw new Error(`Expected 64-byte raw ECDSA signature, got ${raw.length}`);
+  const r = raw.subarray(0, 32);
+  const s = raw.subarray(32, 64);
+  function encodeInt(buf: Buffer): Buffer {
+    let start = 0;
+    while (start < buf.length - 1 && buf[start] === 0) start++;
+    const trimmed = buf.subarray(start);
+    const needsPad = ((trimmed[0] as number) & 0x80) !== 0;
+    const encoded = needsPad ? Buffer.concat([Buffer.from([0x00]), trimmed]) : trimmed;
+    return Buffer.concat([Buffer.from([0x02, encoded.length]), encoded]);
+  }
+  const rDer = encodeInt(Buffer.from(r));
+  const sDer = encodeInt(Buffer.from(s));
+  const seq = Buffer.concat([rDer, sDer]);
+  return Buffer.concat([Buffer.from([0x30, seq.length]), seq]);
 }
 
-function canonicalizeValue(value: unknown): unknown {
-  if (value === null || typeof value !== 'object') {
-    return value;
-  }
-  if (Array.isArray(value)) {
-    return value.map((v) => canonicalizeValue(v));
-  }
-  const obj = value as Record<string, unknown>;
-  const keys = Object.keys(obj).sort();
-  const out: Record<string, unknown> = {};
-  for (const k of keys) {
-    out[k] = canonicalizeValue(obj[k]);
-  }
-  return out;
+export function sha256Base64url(input: string): string {
+  return crypto.createHash('sha256').update(input, 'utf8').digest('base64url');
 }
 
-export function stripProof<T extends JsonLdObject>(doc: T): Omit<T, 'proof'> {
-  const copy = { ...doc } as T & { proof?: unknown };
-  delete copy.proof;
-  return copy as Omit<T, 'proof'>;
+export function decodeDisclosure(disclosure: string): [string, string, unknown] {
+  const decoded = JSON.parse(b64urlDecode(disclosure).toString('utf8')) as unknown[];
+  if (!Array.isArray(decoded) || decoded.length !== 3) {
+    throw new Error('Invalid disclosure format');
+  }
+  return [decoded[0] as string, decoded[1] as string, decoded[2]];
 }
 
-/** Multibase base58-btc (`z` prefix) → raw bytes. */
-export function decodeMultibaseZ(multibase: string): Buffer {
-  if (!multibase.startsWith('z')) {
-    throw new Error('Expected multibase z (base58-btc) encoded value');
-  }
-  return decodeBase58Btc(multibase.slice(1));
-}
-
-function decodeBase58Btc(str: string): Buffer {
-  let num = 0n;
-  for (const c of str) {
-    const idx = BASE58_ALPHABET.indexOf(c);
-    if (idx < 0) {
-      throw new Error('Invalid base58 character');
-    }
-    num = num * 58n + BigInt(idx);
-  }
-  let hex = num.toString(16);
-  if (hex.length % 2) {
-    hex = `0${hex}`;
-  }
-  const buf = Buffer.from(hex, 'hex');
-  let leading = 0;
-  for (let i = 0; i < str.length && str[i] === '1'; i++) {
-    leading++;
-  }
-  return Buffer.concat([Buffer.alloc(leading), buf]);
-}
-
-export function parseDidAndFragment(vm: string): { did: string; fragment?: string } {
-  const hash = vm.indexOf('#');
-  if (hash < 0) {
-    return { did: vm };
-  }
-  return { did: vm.slice(0, hash), fragment: vm.slice(hash + 1) };
-}
-
-/** P-256 `publicKeyMultibase` (z + base58btc) → JWK. */
-export function jwkFromP256PublicKeyMultibase(multibase: string): crypto.JsonWebKey {
-  const multicodecBytes = decodeMultibaseZ(multibase);
-  if (multicodecBytes.length < 3 || multicodecBytes[0] !== 0xed || multicodecBytes[1] !== 0x01) {
-    throw new Error('Only P-256 multibase public keys are supported');
-  }
-  const publicKeyBytes = multicodecBytes.subarray(2);
-  if (publicKeyBytes.length !== 32) {
-    throw new Error(`Invalid P-256 public key length: ${publicKeyBytes.length}`);
+export function parseSdJwtKb(token: string): { issuerJwt: string; disclosures: string[]; kbJwt: string } {
+  const parts = token.split('~');
+  if (parts.length < 3) {
+    throw new Error('Invalid SD-JWT+KB: expected at least issuerJwt~disclosure~kbJwt');
   }
   return {
-    kty: 'EC',
-    crv: 'P-256',
-    x: Buffer.from(publicKeyBytes).toString('base64url'),
+    issuerJwt: parts[0] as string,
+    disclosures: parts.slice(1, parts.length - 1),
+    kbJwt: parts[parts.length - 1] as string,
   };
-}
-
-export function jwkFromVerificationMethod(vm: VerificationMethod): crypto.JsonWebKey | null {
-  if (vm.publicKeyJwk && typeof vm.publicKeyJwk === 'object') {
-    return vm.publicKeyJwk as crypto.JsonWebKey;
-  }
-  const multibase = vm.publicKeyMultibase;
-  if (typeof multibase !== 'string') {
-    return null;
-  }
-  const types = Array.isArray(vm.type) ? vm.type : [vm.type];
-  const p256 = types.some(
-    (t) => typeof t === 'string' && (t.includes('P-256') || t === 'Multikey')
-  );
-  if (!p256) {
-    return null;
-  }
-  try {
-    return jwkFromP256PublicKeyMultibase(multibase);
-  } catch {
-    return null;
-  }
-}
-
-export function findVerificationMethod(
-  didDoc: DIDDocument,
-  verificationMethodId: string
-): crypto.JsonWebKey | null {
-  const { fragment } = parseDidAndFragment(verificationMethodId);
-  const methods = didDoc.verificationMethod ?? [];
-
-  for (const vm of methods) {
-    if (!vm.id) continue;
-    const idMatch =
-      vm.id === verificationMethodId ||
-      (fragment != null && vm.id.endsWith(`#${fragment}`));
-    if (idMatch) {
-      return jwkFromVerificationMethod(vm);
-    }
-  }
-
-  return null;
-}
-
-export function pickSigningJwk(didDoc: DIDDocument, issDid: string, kid?: string): crypto.JsonWebKey {
-  if (kid) {
-    const vmId = kid.startsWith('did:') ? kid : `${issDid}#${kid}`;
-    const jwk = findVerificationMethod(didDoc, vmId);
-    if (jwk) {
-      return jwk;
-    }
-  }
-  for (const vm of didDoc.verificationMethod ?? []) {
-    const jwk = jwkFromVerificationMethod(vm);
-    if (jwk) {
-      return jwk;
-    }
-  }
-  throw new Error('No public key found in DID document for signature verification');
-}
-
-export function publicKeyFromJwk(jwk: crypto.JsonWebKey): crypto.KeyObject {
-  return crypto.createPublicKey({ key: jwk, format: 'jwk' });
-}
-
-/**
- * RS/ES/PS algorithms use `jsonwebtoken` → `jws` → `jwa`.
- * ES256 verification path uses Node crypto.
- */
-const JWT_VERIFY_OPTIONS: jwt.VerifyOptions = {
-  algorithms: ['RS256', 'ES256'] as jwt.Algorithm[],
-  allowInvalidAsymmetricKeyTypes: true,
-};
-
-function verifyEs256JwtWithNodeCrypto(token: string, publicKey: crypto.KeyObject): jwt.JwtPayload {
-  const parts = token.split('.');
-  if (parts.length !== 3) {
-    throw new jwt.JsonWebTokenError('jwt malformed');
-  }
-
-  const securedInput = `${parts[0]}.${parts[1]}`;
-  const signingInput = Buffer.from(securedInput, 'utf8');
-  let sigBuf: Buffer;
-  try {
-    sigBuf = Buffer.from(parts[2], 'base64url');
-  } catch {
-    throw new jwt.JsonWebTokenError('invalid signature');
-  }
-
-  const ok = crypto.verify(null, signingInput, publicKey, sigBuf);
-  if (!ok) {
-    throw new jwt.JsonWebTokenError('invalid signature');
-  }
-
-  let payload: jwt.JwtPayload;
-  try {
-    payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')) as jwt.JwtPayload;
-  } catch {
-    throw new jwt.JsonWebTokenError('invalid payload');
-  }
-
-  const clockTimestamp = Math.floor(Date.now() / 1000);
-  if (payload.nbf !== undefined && typeof payload.nbf === 'number') {
-    if (clockTimestamp < payload.nbf) {
-      throw new jwt.NotBeforeError('jwt not active', new Date(payload.nbf * 1000));
-    }
-  }
-  if (payload.exp !== undefined && typeof payload.exp === 'number') {
-    if (clockTimestamp >= payload.exp) {
-      throw new jwt.TokenExpiredError('jwt expired', new Date(payload.exp * 1000));
-    }
-  }
-
-  return payload;
-}
-
-export function verifyJwtWithKey(token: string, publicKey: crypto.KeyObject): jwt.JwtPayload {
-  const complete = jwt.decode(token, { complete: true });
-  const alg = complete?.header && typeof complete.header === 'object' ? complete.header.alg : undefined;
-
-  if (alg === 'ES256') {
-    return verifyEs256JwtWithNodeCrypto(token, publicKey);
-  }
-
-  return jwt.verify(token, publicKey, JWT_VERIFY_OPTIONS) as jwt.JwtPayload;
-}
-
-export function verifyDataIntegrityEs256(
-  documentWithoutProof: JsonLdObject,
-  proof: DataIntegrityProof,
-  publicKeyJwk: crypto.JsonWebKey
-): void {
-  const proofValue = proof.proofValue;
-  if (!proofValue || typeof proofValue !== 'string') {
-    throw new Error('proofValue is required for Data Integrity verification');
-  }
-
-  const msg = Buffer.from(jcsCanonicalize(documentWithoutProof), 'utf8');
-  const sig = decodeMultibaseZ(proofValue);
-  const key = publicKeyFromJwk(publicKeyJwk);
-
-  const ok = crypto.verify(null, msg, key, sig);
-  if (!ok) {
-    throw new Error('Data Integrity signature verification failed');
-  }
-}
-
-export function extractIssuerDid(credential: I2H2ACredential): string {
-  const iss = credential.issuer;
-  if (typeof iss === 'string') {
-    return iss;
-  }
-  if (iss && typeof iss === 'object' && 'id' in iss && typeof (iss as { id: unknown }).id === 'string') {
-    return (iss as { id: string }).id;
-  }
-  throw new Error('Credential issuer must be a DID string or object with id');
-}
-
-export function credentialTypes(credential: I2H2ACredential): string[] {
-  const t = credential.type;
-  if (Array.isArray(t)) return t.map(String);
-  if (typeof t === 'string') return [t];
-  return [];
-}
-
-export function hasI2H2AType(credential: unknown): boolean {
-  if (detectCredentialFormat(credential) === 'jwt') {
-    try {
-      const decoded = jwt.decode(credential as string, { complete: false }) as Record<string, unknown> | null;
-      if (!decoded || typeof decoded !== 'object') {
-        return false;
-      }
-      const rootVc = decoded.vc;
-      const vcRoot =
-        rootVc && typeof rootVc === 'object' ? (rootVc as Record<string, unknown>) : decoded;
-      return recordHasI2H2AType(vcRoot);
-    } catch {
-      return false;
-    }
-  }
-  const c = credential as I2H2ACredential;
-  if (credentialTypes(c).includes('I2H2A')) {
-    return true;
-  }
-  return recordHasI2H2AType(c as unknown as Record<string, unknown>);
-}
-
-export function extractVpPayloadFromJwt(jwtPayload: jwt.JwtPayload): Record<string, unknown> {
-  const p = jwtPayload as Record<string, unknown>;
-  if (p.vp && typeof p.vp === 'object') {
-    return p.vp as Record<string, unknown>;
-  }
-  return p;
-}
-
-export function ensureVerifiableCredentialArray(vp: Record<string, unknown>): unknown[] | null {
-  const vcs = vp.verifiableCredential;
-  if (!Array.isArray(vcs)) {
-    return null;
-  }
-  return vcs;
-}
-
-export function parseIsoDate(value: string | undefined): number | undefined {
-  if (!value) return undefined;
-  const t = Date.parse(value);
-  return Number.isNaN(t) ? undefined : t;
-}
-
-export interface TimeWindow {
-  start?: number;
-  end?: number;
-}
-
-export function credentialValidityWindow(
-  cred: I2H2ACredential,
-  jwtEnvelope?: jwt.JwtPayload
-): TimeWindow {
-  const start =
-    parseIsoDate(cred.validFrom) ??
-    parseIsoDate(cred.issuanceDate) ??
-    (jwtEnvelope?.nbf != null ? jwtEnvelope.nbf * 1000 : undefined) ??
-    (jwtEnvelope?.iat != null ? jwtEnvelope.iat * 1000 : undefined);
-
-  const end =
-    parseIsoDate(cred.validUntil) ??
-    parseIsoDate(cred.expirationDate) ??
-    (jwtEnvelope?.exp != null ? jwtEnvelope.exp * 1000 : undefined);
-
-  return { start, end };
-}
-
-export function isJwtPresentation(vp: unknown): vp is string {
-  return typeof vp === 'string' && vp.startsWith('eyJ');
 }

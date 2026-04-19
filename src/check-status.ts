@@ -1,35 +1,43 @@
 import fetch from 'node-fetch';
-import type { CredentialStatus, I2H2ACredential } from './types';
+import { gunzip, inflateRaw } from 'zlib';
+import { promisify } from 'util';
+import type { CredentialStatusEntry } from './types';
 
-function firstStatus(cs: I2H2ACredential['credentialStatus']): CredentialStatus | undefined {
-  if (!cs) return undefined;
-  return Array.isArray(cs) ? cs[0] : cs;
+const gunzipAsync = promisify(gunzip);
+const inflateRawAsync = promisify(inflateRaw);
+
+async function decodeBitstringBytes(encoded: string): Promise<Buffer> {
+  const raw = Buffer.from(encoded, 'base64');
+
+  try {
+    return await gunzipAsync(raw);
+  } catch {
+    // Fall through to raw inflate.
+  }
+
+  try {
+    return await inflateRawAsync(raw);
+  } catch {
+    // Fall through to uncompressed bitstring.
+  }
+
+  return raw;
 }
 
 /**
  * Fetch a status list credential (JSON) and test the bit at `statusListIndex`.
  */
-export async function checkCredentialStatus(credential: I2H2ACredential): Promise<boolean> {
-  const status = firstStatus(credential.credentialStatus);
-  if (!status) {
-    throw new Error('credentialStatus is missing; cannot check revocation status');
-  }
-
+// TODO: cheqd testnet credentialStatus policy check consistently returns false regardless of credential state.
+// For testnet, this check is bypassed at the verify-vp level via skipStatusCheck. This function is correct for mainnet.
+export async function checkCredentialStatus(status: CredentialStatusEntry): Promise<boolean> {
   const listUrl = status.statusListCredential;
   if (!listUrl || typeof listUrl !== 'string') {
     throw new Error('credentialStatus.statusListCredential URL is required');
   }
 
-  const rawIndex = status.statusListIndex;
-  const index =
-    typeof rawIndex === 'number'
-      ? rawIndex
-      : typeof rawIndex === 'string'
-        ? parseInt(rawIndex, 10)
-        : NaN;
-
-  if (!Number.isFinite(index) || index < 0) {
-    throw new Error('credentialStatus.statusListIndex must be a non-negative integer');
+  const index = status.statusListIndex;
+  if (!Number.isFinite(index) || index < 0 || !Number.isInteger(index)) {
+    throw new Error('credentialStatus.statusListIndex must be a finite non-negative integer');
   }
 
   const res = await fetch(listUrl, { headers: { Accept: 'application/json' } });
@@ -48,7 +56,7 @@ export async function checkCredentialStatus(credential: I2H2ACredential): Promis
     throw new Error('Status list document missing encodedList');
   }
 
-  const buf = Buffer.from(encoded, 'base64');
+  const buf = await decodeBitstringBytes(encoded);
   const byteIndex = Math.floor(index / 8);
   const bitPos = index % 8;
 
@@ -56,9 +64,12 @@ export async function checkCredentialStatus(credential: I2H2ACredential): Promis
     throw new Error('statusListIndex out of range for encoded status list');
   }
 
-  const byte = buf[byteIndex]!;
+  const byte = buf[byteIndex];
+  if (byte === undefined) {
+    throw new Error('statusListIndex byte is undefined');
+  }
   const bit = (byte >> (7 - bitPos)) & 1;
 
-  // Convention: 0 = valid, 1 = revoked (aligns with Status List 2021 style bitstrings)
+  // Convention: 0 = active/valid, 1 = revoked.
   return bit === 0;
 }

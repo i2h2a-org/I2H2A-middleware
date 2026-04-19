@@ -27,7 +27,7 @@ describe('resolveDidDocument', () => {
     expect(mockedFetch).not.toHaveBeenCalled();
   });
 
-  it('returns correct verification method for a valid did:key (P-256, multicodec 0xed01)', async () => {
+  it('returns correct verification method for a valid did:key (P-256, multicodec 0x1200)', async () => {
     const did = 'did:key:zDnaeiboHoaMf4yS2Nn81WhnWL7Khz16WYs7MNNUFW5kSNDUz';
 
     const doc = await resolveDidDocument(did);
@@ -36,7 +36,7 @@ describe('resolveDidDocument', () => {
     expect(vm).toBeDefined();
     expect(vm?.type).toBe('JsonWebKey2020');
     expect(vm?.controller).toBe(did);
-    expect(vm?.id).toBe(`${did}#z6MkiboHoaMf4yS2Nn81WhnWL7Khz16WYs7MNNUFW5kSNDUz`);
+    expect(vm?.id).toBe(`${did}#${did.slice('did:key:'.length)}`);
     expect(vm?.publicKeyJwk).toMatchObject({
       kty: 'EC',
       crv: 'P-256',

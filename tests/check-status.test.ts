@@ -1,31 +1,18 @@
 import fetch from 'node-fetch';
 import { checkCredentialStatus } from '../src/check-status';
-import type { CredentialStatus, I2H2ACredential } from '../src/types';
+import type { CredentialStatusEntry } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
 
 const mockedFetch = fetch as unknown as jest.MockedFunction<typeof fetch>;
 
-function makeCredential(statusOverride?: Partial<CredentialStatus>): I2H2ACredential {
+function makeStatusEntry(statusOverride?: Partial<CredentialStatusEntry>): CredentialStatusEntry {
   return {
-    '@context': ['https://www.w3.org/ns/credentials/v2'],
-    type: ['VerifiableCredential', 'I2H2A'],
-    issuer: 'did:example:issuer',
-    credentialSubject: {
-      id: 'did:example:agent',
-      scope: { mcpServers: ['mcp-a'], taskType: 'read-only' },
-      authorization: null,
-      delegatedBy: 'did:cheqd:testnet:ec6a1292-eb42-4754-bef3-9c3e95c32212',
-      delegationDepth: 0,
-      parentCredential: null,
-    },
-    credentialStatus: {
-      id: 'https://example.com/status/1#0',
-      type: 'BitstringStatusListEntry',
-      statusListCredential: 'https://example.com/status/1',
-      statusListIndex: '0',
-      ...(statusOverride ?? {}),
-    },
+    id: 'https://example.com/status/1#0',
+    type: 'BitstringStatusListEntry',
+    statusListCredential: 'https://example.com/status/1',
+    statusListIndex: 0,
+    ...(statusOverride ?? {}),
   };
 }
 
@@ -46,7 +33,7 @@ describe('checkCredentialStatus', () => {
     // 0x00 -> "AA==", bit 0 is 0 => active
     mockFetchJson(true, 200, { credentialSubject: { encodedList: 'AA==' } });
 
-    const result = await checkCredentialStatus(makeCredential({ statusListIndex: '0' }));
+    const result = await checkCredentialStatus(makeStatusEntry({ statusListIndex: 0 }));
 
     expect(result).toBe(true);
     expect(mockedFetch).toHaveBeenCalledWith('https://example.com/status/1', {
@@ -58,25 +45,14 @@ describe('checkCredentialStatus', () => {
     // 0x80 -> "gA==", bit 0 is 1 => revoked
     mockFetchJson(true, 200, { credentialSubject: { encodedList: 'gA==' } });
 
-    const result = await checkCredentialStatus(makeCredential({ statusListIndex: '0' }));
+    const result = await checkCredentialStatus(makeStatusEntry({ statusListIndex: 0 }));
 
     expect(result).toBe(false);
   });
 
-  it('throws when credentialStatus is missing', async () => {
-    const credential = {
-      ...makeCredential(),
-      credentialStatus: undefined,
-    } as unknown as I2H2ACredential;
-
-    await expect(checkCredentialStatus(credential)).rejects.toThrow(
-      'credentialStatus is missing; cannot check revocation status'
-    );
-  });
-
   it('throws when statusListCredential URL is missing', async () => {
     await expect(
-      checkCredentialStatus(makeCredential({ statusListCredential: undefined }))
+      checkCredentialStatus(makeStatusEntry({ statusListCredential: undefined as unknown as string }))
     ).rejects.toThrow('credentialStatus.statusListCredential URL is required');
   });
 
@@ -86,8 +62,8 @@ describe('checkCredentialStatus', () => {
     ['non-numeric string', 'abc'],
   ])('throws when statusListIndex is invalid (%s)', async (_label, badIndex) => {
     await expect(
-      checkCredentialStatus(makeCredential({ statusListIndex: badIndex as string | number }))
-    ).rejects.toThrow('credentialStatus.statusListIndex must be a non-negative integer');
+      checkCredentialStatus(makeStatusEntry({ statusListIndex: badIndex as number }))
+    ).rejects.toThrow('credentialStatus.statusListIndex must be a finite non-negative integer');
   });
 
   it('throws when statusListIndex is out of range for the encoded bitstring', async () => {
@@ -95,14 +71,14 @@ describe('checkCredentialStatus', () => {
     mockFetchJson(true, 200, { credentialSubject: { encodedList: 'AA==' } });
 
     await expect(
-      checkCredentialStatus(makeCredential({ statusListIndex: '8' }))
+      checkCredentialStatus(makeStatusEntry({ statusListIndex: 8 }))
     ).rejects.toThrow('statusListIndex out of range for encoded status list');
   });
 
   it('throws when the status list fetch returns non-200', async () => {
     mockFetchJson(false, 503, {});
 
-    await expect(checkCredentialStatus(makeCredential())).rejects.toThrow(
+    await expect(checkCredentialStatus(makeStatusEntry())).rejects.toThrow(
       'Status list could not be fetched (503): https://example.com/status/1'
     );
   });
@@ -110,7 +86,7 @@ describe('checkCredentialStatus', () => {
   it('throws when the status list document is missing encodedList', async () => {
     mockFetchJson(true, 200, { credentialSubject: {} });
 
-    await expect(checkCredentialStatus(makeCredential())).rejects.toThrow(
+    await expect(checkCredentialStatus(makeStatusEntry())).rejects.toThrow(
       'Status list document missing encodedList'
     );
   });
