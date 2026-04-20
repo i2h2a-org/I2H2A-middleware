@@ -124,7 +124,7 @@ describe('integration (mocked resolver and status)', () => {
       iat: nowSec,
       nbf: nowSec,
       exp: opts?.exp ?? nowSec + 3600,
-      vct: 'I2H2A' as const,
+      vct: 'https://rotavera.io/credentials/I2H2A' as const,
       cnf: { jwk: holderJwk },
       credentialStatus:
         opts?.status ??

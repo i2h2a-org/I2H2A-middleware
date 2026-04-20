@@ -1,4 +1,4 @@
-# @i2h2a/mcp-middleware
+# @rotavera/mcp-middleware
 
 Reference implementation of I2H2A SD-JWT+KB verification middleware for MCP servers and other verifiers.
 
@@ -7,13 +7,13 @@ Implements the [I2H2A v0.2 specification](https://github.com/UltraQuamfy/I2H2A-s
 ## Installation
 
 ```
-npm install @i2h2a/mcp-middleware
+npm install @rotavera/mcp-middleware
 ```
 
 ## Quick start
 
 ```typescript
-import { verifyI2H2APresentation } from '@i2h2a/mcp-middleware';
+import { verifyI2H2APresentation } from '@rotavera/mcp-middleware';
 
 async function gate(sdJwtKb: string, nonce: string) {
   const result = await verifyI2H2APresentation(sdJwtKb, {
@@ -51,7 +51,7 @@ Verifies an SD-JWT+KB presentation containing an I2H2A credential.
 **Verification steps performed:**
 1. Parse SD-JWT+KB (issuer JWT, disclosures, KB-JWT)
 2. Verify issuer ES256 signature (P-256, `JsonWebKey2020` verification method)
-3. Verify `vct` claim equals `"I2H2A"`
+3. Verify `vct` claim equals `"https://rotavera.io/credentials/I2H2A"`
 4. Verify all disclosure hashes against `_sd` array
 5. Verify KB-JWT ES256 signature against `cnf.jwk` (agent P-256 public key)
 6. Verify KB-JWT `aud`, `nonce`, and `sd_hash` binding

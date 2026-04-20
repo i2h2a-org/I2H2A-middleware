@@ -6,7 +6,7 @@
  *
  * ```ts
  * import express from 'express';
- * import { verifyI2H2APresentation } from '@i2h2a/mcp-middleware';
+ * import { verifyI2H2APresentation } from '@rotavera/mcp-middleware';
  *
  * const app = express();
  * app.use(express.json());

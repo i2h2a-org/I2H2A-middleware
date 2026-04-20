@@ -68,6 +68,6 @@ export async function checkCredentialStatus(status: CredentialStatusEntry): Prom
   }
   const bit = (byte >> (7 - bitPos)) & 1;
 
-  // Convention: 0 = active/valid, 1 = revoked.
+  // Bit convention per W3C Bitstring Status List §7: 0 = active, 1 = revoked.
   return bit === 0;
 }

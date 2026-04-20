@@ -102,7 +102,7 @@ describe('verifyI2H2APresentation', () => {
       iat: now,
       nbf: now,
       exp: now + 3600,
-      vct: 'I2H2A' as const,
+      vct: 'https://rotavera.io/credentials/I2H2A' as const,
       cnf: { jwk: holderJwk },
       credentialStatus:
         opts?.status ??

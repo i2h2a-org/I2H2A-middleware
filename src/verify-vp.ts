@@ -56,8 +56,9 @@ export async function verifyI2H2APresentation(
   }
   const issuerPayload = decodeJwtPart(issuerPayloadB64) as I2H2AIssuerPayload;
 
-  if (issuerPayload.vct !== 'I2H2A') {
-    return { valid: false, error: 'Invalid vct (expected I2H2A)' };
+  const VALID_VCT = 'https://rotavera.io/credentials/I2H2A';
+  if (issuerPayload.vct !== VALID_VCT) {
+    return { valid: false, error: `Invalid vct (expected ${VALID_VCT})` };
   }
   if (issuerPayload._sd_alg !== 'sha-256') {
     return { valid: false, error: 'Invalid _sd_alg (expected sha-256)' };

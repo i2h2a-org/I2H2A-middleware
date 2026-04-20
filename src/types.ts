@@ -29,7 +29,7 @@ export interface I2H2AIssuerPayload {
   iat: number;
   nbf?: number;
   exp: number;
-  vct: 'I2H2A';
+  vct: string;
   cnf: CnfJwk;
   credentialStatus?: CredentialStatusEntry;
   _sd_alg: 'sha-256';

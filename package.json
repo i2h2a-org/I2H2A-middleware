@@ -1,6 +1,6 @@
 {
-  "name": "@i2h2a/mcp-middleware",
-  "version": "0.1.0-alpha.1",
+  "name": "@rotavera/mcp-middleware",
+  "version": "1.0.0",
   "description": "Reference implementation of OID4VP verification middleware for I2H2A delegation credentials",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -18,9 +18,12 @@
     "ai-agents",
     "delegation"
   ],
-  "author": "I2H2A Contributors",
+  "author": "Rotavera",
   "license": "MIT",
   "repository": "https://github.com/UltraQuamfy/I2H2A-middleware",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "node-fetch": "^3.3.2"
   },
