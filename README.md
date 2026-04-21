@@ -1,19 +1,26 @@
-# @rotavera/mcp-middleware
+# @rotavera/verification-sdk
 
-Reference implementation of I2H2A SD-JWT+KB verification middleware for MCP servers and other verifiers.
+Reference implementation of I2H2A SD-JWT+KB verification for any integration point and other verifiers.
 
 Implements the [I2H2A v0.2 specification](https://github.com/UltraQuamfy/I2H2A-spec/blob/main/I2H2A-v0.2-draft.md): SD-JWT VC format (RFC 9901), ES256/P-256 signatures, KB-JWT holder binding.
 
 ## Installation
 
 ```
-npm install @rotavera/mcp-middleware
+npm install @rotavera/verification-sdk
 ```
+
+## Use Cases
+
+- MCP servers (import and mount in Express routes)
+- Shopify apps (plugin verification logic)
+- Payment gateways (verify mandate before processing)
+- API middleware (drop into REST/GraphQL endpoints)
 
 ## Quick start
 
 ```typescript
-import { verifyI2H2APresentation } from '@rotavera/mcp-middleware';
+import { verifyI2H2APresentation } from '@rotavera/verification-sdk';
 
 async function gate(sdJwtKb: string, nonce: string) {
   const result = await verifyI2H2APresentation(sdJwtKb, {
@@ -75,7 +82,7 @@ Checks Bitstring Status List revocation status for the given `credentialStatus` 
 
 ## Credential format
 
-This middleware verifies **SD-JWT VC** credentials (RFC 9901) with **ES256/P-256** signatures only. SD-JWT VC format (v0.1) is not supported in v0.2+.
+This SDK verifies **SD-JWT VC** credentials (RFC 9901) with **ES256/P-256** signatures only. SD-JWT VC format (v0.1) is not supported in v0.2+.
 
 ## I2H2A specification
 

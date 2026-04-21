@@ -1,7 +1,7 @@
 {
-  "name": "@rotavera/mcp-middleware",
+  "name": "@rotavera/verification-sdk",
   "version": "1.0.0",
-  "description": "Reference implementation of OID4VP verification middleware for I2H2A delegation credentials",
+  "description": "Universal I2H2A credential verification for MCP servers, payment gateways, and commerce integrations",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
