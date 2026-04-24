@@ -1,5 +1,5 @@
 {
-  "name": "@rotavera/verification-sdk",
+  "name": "@i2h2a/verification-sdk",
   "version": "1.0.0",
   "description": "Universal I2H2A credential verification for MCP servers, payment gateways, and commerce integrations",
   "main": "dist/index.js",

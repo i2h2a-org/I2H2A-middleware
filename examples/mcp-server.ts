@@ -5,7 +5,7 @@
  * Pseudocode for a Node MCP server using `@modelcontextprotocol/sdk` or similar:
  *
  * ```ts
- * import { verifyI2H2APresentation } from '@rotavera/verification-sdk';
+ * import { verifyI2H2APresentation } from '@i2h2a/verification-sdk';
  *
  * // When the client connects or sends an initial message with a compact presentation:
  * async function onClientPresentation(sdJwtKb: string) {

@@ -1,4 +1,4 @@
-# @rotavera/verification-sdk
+# @i2h2a/verification-sdk
 
 Reference implementation of I2H2A SD-JWT+KB verification for any integration point and other verifiers.
 
@@ -7,7 +7,7 @@ Implements the [I2H2A v0.2 specification](https://github.com/i2h2a-org/I2H2A-spe
 ## Installation
 
 ```
-npm install @rotavera/verification-sdk
+npm install @i2h2a/verification-sdk
 ```
 
 ## Use Cases
@@ -20,7 +20,7 @@ npm install @rotavera/verification-sdk
 ## Quick start
 
 ```typescript
-import { verifyI2H2APresentation } from '@rotavera/verification-sdk';
+import { verifyI2H2APresentation } from '@i2h2a/verification-sdk';
 
 async function gate(sdJwtKb: string, nonce: string) {
   const result = await verifyI2H2APresentation(sdJwtKb, {
