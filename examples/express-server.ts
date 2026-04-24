@@ -6,7 +6,7 @@
  *
  * ```ts
  * import express from 'express';
- * import { verifyI2H2APresentation } from '@rotavera/mcp-middleware';
+ * import { verifyI2H2APresentation } from '@rotavera/verification-sdk';
  *
  * const app = express();
  * app.use(express.json());
@@ -14,7 +14,7 @@
  * app.post('/mcp', async (req, res, next) => {
  *   const sdJwtKb = req.body?.sdJwtKb;
  *   const result = await verifyI2H2APresentation(sdJwtKb, {
- *     mcpServerId: process.env.MCP_SERVER_ID,
+ *     serverId: process.env.SERVER_ID,
  *     taskType: req.body?.taskType,
  *   });
  *   if (!result.valid) {

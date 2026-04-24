@@ -2,7 +2,7 @@
 
 Reference implementation of I2H2A SD-JWT+KB verification for any integration point and other verifiers.
 
-Implements the [I2H2A v0.2 specification](https://github.com/UltraQuamfy/I2H2A-spec/blob/main/I2H2A-v0.2-draft.md): SD-JWT VC format (RFC 9901), ES256/P-256 signatures, KB-JWT holder binding.
+Implements the [I2H2A v0.2 specification](https://github.com/i2h2a-org/I2H2A-spec/blob/main/I2H2A-v0.2-draft.md): SD-JWT VC format (RFC 9901), ES256/P-256 signatures, KB-JWT holder binding.
 
 ## Installation
 
@@ -24,7 +24,7 @@ import { verifyI2H2APresentation } from '@rotavera/verification-sdk';
 
 async function gate(sdJwtKb: string, nonce: string) {
   const result = await verifyI2H2APresentation(sdJwtKb, {
-    mcpServerId: 'your-mcp-server-id',
+    serverId: 'your-service-id',
     nonce,
   });
 
@@ -49,7 +49,8 @@ Verifies an SD-JWT+KB presentation containing an I2H2A credential.
 
 **Parameters:**
 - `sdJwtKb: string` — SD-JWT+KB compact serialisation
-- `options.mcpServerId: string` — verifier audience identifier; must match `aud` in KB-JWT
+- `options.serverId: string` — verifier audience identifier; must match `aud` in KB-JWT
+- `options.mcpServerId?: string` — backward compatibility alias for `serverId`
 - `options.nonce: string` — challenge nonce issued by verifier; must match `nonce` in KB-JWT
 - `options.resolverUrl?: string` — optional DID resolver URL override
 
@@ -58,13 +59,13 @@ Verifies an SD-JWT+KB presentation containing an I2H2A credential.
 **Verification steps performed:**
 1. Parse SD-JWT+KB (issuer JWT, disclosures, KB-JWT)
 2. Verify issuer ES256 signature (P-256, `JsonWebKey2020` verification method)
-3. Verify `vct` claim equals `"https://rotavera.io/credentials/I2H2A"`
+3. Verify `vct` claim equals `"https://i2h2a.org/credentials/I2H2A"`
 4. Verify all disclosure hashes against `_sd` array
 5. Verify KB-JWT ES256 signature against `cnf.jwk` (agent P-256 public key)
 6. Verify KB-JWT `aud`, `nonce`, and `sd_hash` binding
 7. Check temporal validity (`nbf`, `exp`)
 8. Check Bitstring Status List revocation status (credential status URLs from the VC)
-9. Enforce delegation scope (`scope.mcpServers`, `scope.taskType`)
+9. Enforce delegation scope (`scope.services`, `scope.taskType`) with fallback to `scope.mcpServers`
 10. Assert `delegationDepth === 0` and `parentCredential === null`
 
 ### `resolveDidDocument(did, resolverUrl?)`
@@ -86,7 +87,7 @@ This SDK verifies **SD-JWT VC** credentials (RFC 9901) with **ES256/P-256** sign
 
 ## I2H2A specification
 
-https://github.com/UltraQuamfy/I2H2A-spec
+https://github.com/i2h2a-org/I2H2A-spec
 
 ## License
 

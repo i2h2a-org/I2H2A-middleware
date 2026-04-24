@@ -49,7 +49,7 @@ function makeDidDoc(did: string, publicJwk: P256Jwk): DIDDocument {
 
 describe('verifyI2H2APresentation', () => {
   const issuerDid = 'did:key:test-issuer';
-  const mcpServerId = 'test-server';
+  const serverId = 'test-server';
   const nonce = 'test-nonce';
 
   let issuerKeys: crypto.KeyPairKeyObjectResult;
@@ -90,7 +90,7 @@ describe('verifyI2H2APresentation', () => {
         Buffer.from(JSON.stringify(['s3', 'parentCredential', opts?.parentCredential ?? null]))
       ),
       b64urlEncode(
-        Buffer.from(JSON.stringify(['s4', 'scope.mcpServers', opts?.mcpServers ?? [mcpServerId]]))
+        Buffer.from(JSON.stringify(['s4', 'scope.services', opts?.mcpServers ?? [serverId]]))
       ),
       b64urlEncode(Buffer.from(JSON.stringify(['s5', 'scope.taskType', 'read-only']))),
       b64urlEncode(Buffer.from(JSON.stringify(['s6', 'authorization', { role: 'read' }]))),
@@ -102,7 +102,7 @@ describe('verifyI2H2APresentation', () => {
       iat: now,
       nbf: now,
       exp: now + 3600,
-      vct: 'https://rotavera.io/credentials/I2H2A' as const,
+      vct: 'https://i2h2a.org/credentials/I2H2A' as const,
       cnf: { jwk: holderJwk },
       credentialStatus:
         opts?.status ??
@@ -120,7 +120,7 @@ describe('verifyI2H2APresentation', () => {
     const sdInput = `${issuerJwt}~${disclosures.join('~')}~`;
     const kbPayload = {
       iat: now,
-      aud: mcpServerId,
+      aud: serverId,
       nonce,
       sd_hash: crypto.createHash('sha256').update(sdInput, 'utf8').digest('base64url'),
     };
@@ -131,7 +131,7 @@ describe('verifyI2H2APresentation', () => {
   it('accepts a valid SD-JWT+KB presentation', async () => {
     const token = buildToken();
     const res = await verifyI2H2APresentation(token, {
-      mcpServerId,
+      serverId,
       nonce,
     });
     expect(res.valid).toBe(true);
@@ -141,18 +141,18 @@ describe('verifyI2H2APresentation', () => {
   it('rejects when MCP server is not permitted', async () => {
     const token = buildToken({ mcpServers: ['other-server'] });
     const res = await verifyI2H2APresentation(token, {
-      mcpServerId,
+      serverId,
       nonce,
     });
     expect(res.valid).toBe(false);
-    expect(res.error).toBe('Delegation scope does not permit this MCP server');
+    expect(res.error).toBe('Delegation scope does not permit this service');
   });
 
   it('rejects revoked credential from status check', async () => {
     mockedStatus.mockResolvedValueOnce(false);
     const token = buildToken();
     const res = await verifyI2H2APresentation(token, {
-      mcpServerId,
+      serverId,
       nonce,
     });
     expect(res.valid).toBe(false);
@@ -162,7 +162,7 @@ describe('verifyI2H2APresentation', () => {
   it('rejects invalid delegatedBy value', async () => {
     const token = buildToken({ delegatedBy: '' });
     const res = await verifyI2H2APresentation(token, {
-      mcpServerId,
+      serverId,
       nonce,
     });
     expect(res.valid).toBe(false);

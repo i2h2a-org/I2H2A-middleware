@@ -5,12 +5,12 @@
  * Pseudocode for a Node MCP server using `@modelcontextprotocol/sdk` or similar:
  *
  * ```ts
- * import { verifyI2H2APresentation } from '@rotavera/mcp-middleware';
+ * import { verifyI2H2APresentation } from '@rotavera/verification-sdk';
  *
  * // When the client connects or sends an initial message with a compact presentation:
  * async function onClientPresentation(sdJwtKb: string) {
  *   const out = await verifyI2H2APresentation(sdJwtKb, {
- *     mcpServerId: 'my-mcp-server-id',
+ *     serverId: 'my-service-id',
  *     taskType: 'read-only',
  *   });
  *   if (!out.valid) throw new Error(out.error ?? 'Invalid I2H2A presentation');

@@ -52,6 +52,9 @@ export interface I2H2ADisclosedClaims {
   delegatedBy?: string;
   parentCredential?: string | null;
   delegationDepth?: number;
+  /** Preferred field name. */
+  'scope.services'?: string[];
+  /** Backward compatibility with older payloads. */
   'scope.mcpServers'?: string[];
   'scope.taskType'?: string;
   authorization?: unknown;
@@ -86,6 +89,9 @@ export interface I2H2AClaims {
   agentDid: string;
   delegatedBy: string;
   scope: {
+    /** Preferred field name. */
+    services: string[];
+    /** Backward compatibility field mirrored from services. */
     mcpServers: string[];
     taskType: string;
   };
@@ -95,7 +101,9 @@ export interface I2H2AClaims {
 /** Options passed to verifyI2H2APresentation. */
 export interface VerifyOptions {
   /** Verifier audience — must match aud in KB-JWT. */
-  mcpServerId: string;
+  serverId?: string;
+  /** Backward compatibility alias for serverId. */
+  mcpServerId?: string;
   /** Challenge nonce — must match nonce in KB-JWT. */
   nonce: string;
   /** DID resolver URL (required when issuer DID is not did:key). */

@@ -56,7 +56,7 @@ export async function verifyI2H2APresentation(
   }
   const issuerPayload = decodeJwtPart(issuerPayloadB64) as I2H2AIssuerPayload;
 
-  const VALID_VCT = 'https://rotavera.io/credentials/I2H2A';
+  const VALID_VCT = 'https://i2h2a.org/credentials/I2H2A';
   if (issuerPayload.vct !== VALID_VCT) {
     return { valid: false, error: `Invalid vct (expected ${VALID_VCT})` };
   }
@@ -163,7 +163,12 @@ export async function verifyI2H2APresentation(
   }
   const [, kbPayloadB64] = kbParts;
   const kbPayload = decodeJwtPart(kbPayloadB64) as KbJwtPayload;
-  if (!safeEqualString(kbPayload.aud, options.mcpServerId)) {
+  // Prefer serverId; support mcpServerId for backward compatibility.
+  const expectedServerId = options.serverId ?? options.mcpServerId;
+  if (!expectedServerId || expectedServerId.trim() === '') {
+    return { valid: false, error: 'Missing verifier serverId' };
+  }
+  if (!safeEqualString(kbPayload.aud, expectedServerId)) {
     return { valid: false, error: 'KB-JWT aud mismatch' };
   }
   if (!safeEqualString(kbPayload.nonce, options.nonce)) {
@@ -214,9 +219,11 @@ export async function verifyI2H2APresentation(
     return { valid: false, error: 'delegatedBy is required' };
   }
 
-  if (!validateDelegationScope(claims, options.mcpServerId)) {
-    return { valid: false, error: 'Delegation scope does not permit this MCP server' };
+  if (!validateDelegationScope(claims, expectedServerId)) {
+    return { valid: false, error: 'Delegation scope does not permit this service' };
   }
+
+  const services = (claims['scope.services'] ?? claims['scope.mcpServers'] ?? []) as string[];
 
   return {
     valid: true,
@@ -224,7 +231,8 @@ export async function verifyI2H2APresentation(
       agentDid: issuerPayload.sub,
       delegatedBy: claims.delegatedBy as string,
       scope: {
-        mcpServers: (claims['scope.mcpServers'] ?? []) as string[],
+        services,
+        mcpServers: services,
         taskType: (claims['scope.taskType'] ?? '') as string,
       },
       authorization: claims.authorization ?? null,

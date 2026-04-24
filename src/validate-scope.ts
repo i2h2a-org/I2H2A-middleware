@@ -2,9 +2,10 @@ import type { I2H2ADisclosedClaims } from './types';
 
 export function validateDelegationScope(
   claims: I2H2ADisclosedClaims,
-  mcpServerId: string
+  serverId: string
 ): boolean {
-  const allowedServers = claims['scope.mcpServers'];
+  // Prefer scope.services; support scope.mcpServers for backward compatibility.
+  const allowedServers = claims['scope.services'] ?? claims['scope.mcpServers'];
 
   if (!Array.isArray(allowedServers) || allowedServers.length === 0) {
     return false;
@@ -16,6 +17,6 @@ export function validateDelegationScope(
     }
   }
 
-  const normalizedId = mcpServerId.trim();
+  const normalizedId = serverId.trim();
   return allowedServers.some((s) => s.trim() === normalizedId);
 }

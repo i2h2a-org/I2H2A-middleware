@@ -50,7 +50,7 @@ function disclosureHash(disclosureB64: string): string {
 describe('integration (mocked resolver and status)', () => {
   const issuerDid = 'did:key:test-issuer';
   const agentDid = 'did:key:test-agent';
-  const mcpServerId = 'test-server';
+  const serverId = 'test-server';
   const nonce = 'test-nonce';
 
   let issuerKeys: crypto.KeyPairKeyObjectResult;
@@ -104,7 +104,7 @@ describe('integration (mocked resolver and status)', () => {
         Buffer.from(JSON.stringify(['s3', 'parentCredential', opts?.parentCredential ?? null]))
       ),
       b64urlEncode(
-        Buffer.from(JSON.stringify(['s4', 'scope.mcpServers', opts?.scopeServer ?? [mcpServerId]]))
+        Buffer.from(JSON.stringify(['s4', 'scope.services', opts?.scopeServer ?? [serverId]]))
       ),
       b64urlEncode(Buffer.from(JSON.stringify(['s5', 'scope.taskType', 'read-only']))),
       b64urlEncode(
@@ -124,7 +124,7 @@ describe('integration (mocked resolver and status)', () => {
       iat: nowSec,
       nbf: nowSec,
       exp: opts?.exp ?? nowSec + 3600,
-      vct: 'https://rotavera.io/credentials/I2H2A' as const,
+      vct: 'https://i2h2a.org/credentials/I2H2A' as const,
       cnf: { jwk: holderJwk },
       credentialStatus:
         opts?.status ??
@@ -145,7 +145,7 @@ describe('integration (mocked resolver and status)', () => {
       : crypto.createHash('sha256').update(sdInput, 'utf8').digest('base64url');
     const kbPayload = {
       iat: nowSec,
-      aud: opts?.kbAud ?? mcpServerId,
+      aud: opts?.kbAud ?? serverId,
       nonce: opts?.kbNonce ?? nonce,
       sd_hash: sdHash,
     };
@@ -156,10 +156,10 @@ describe('integration (mocked resolver and status)', () => {
     return `${sdInput}${kbJwt}`;
   }
 
-  it('valid token with matching mcpServerId returns valid=true with correct claims', async () => {
+  it('valid token with matching serverId returns valid=true with correct claims', async () => {
     const token = buildToken();
     const res = await verifyI2H2APresentation(token, {
-      mcpServerId,
+      serverId,
       nonce,
     });
 
@@ -167,26 +167,26 @@ describe('integration (mocked resolver and status)', () => {
     expect(res.claims).toMatchObject({
       agentDid,
       delegatedBy: 'did:example:holder',
-      scope: { mcpServers: [mcpServerId], taskType: 'read-only' },
+      scope: { services: [serverId], mcpServers: [serverId], taskType: 'read-only' },
       authorization: { delegationDepth: 0, parentCredential: null },
     });
   });
 
-  it('token with mismatched mcpServerId returns valid=false', async () => {
+  it('token with mismatched serverId returns valid=false', async () => {
     const token = buildToken({ kbAud: 'different-server' });
     const res = await verifyI2H2APresentation(token, {
-      mcpServerId: 'different-server',
+      serverId: 'different-server',
       nonce,
     });
 
     expect(res.valid).toBe(false);
-    expect(res.error).toBe('Delegation scope does not permit this MCP server');
+    expect(res.error).toBe('Delegation scope does not permit this service');
   });
 
   it('token with mismatched nonce returns valid=false', async () => {
     const token = buildToken({ kbNonce: 'other-nonce' });
     const res = await verifyI2H2APresentation(token, {
-      mcpServerId,
+      serverId,
       nonce,
     });
 
@@ -198,7 +198,7 @@ describe('integration (mocked resolver and status)', () => {
     mockedStatus.mockResolvedValueOnce(false);
     const token = buildToken();
     const res = await verifyI2H2APresentation(token, {
-      mcpServerId,
+      serverId,
       nonce,
     });
 
@@ -210,7 +210,7 @@ describe('integration (mocked resolver and status)', () => {
     const nowSec = Math.floor(Date.now() / 1000);
     const token = buildToken({ exp: nowSec - 60 });
     const res = await verifyI2H2APresentation(token, {
-      mcpServerId,
+      serverId,
       nonce,
     });
 
@@ -221,7 +221,7 @@ describe('integration (mocked resolver and status)', () => {
   it('token with invalid kb signature returns valid=false', async () => {
     const token = buildToken({ signKbWithWrongKey: true });
     const res = await verifyI2H2APresentation(token, {
-      mcpServerId,
+      serverId,
       nonce,
     });
 
@@ -232,7 +232,7 @@ describe('integration (mocked resolver and status)', () => {
   it('token with bad sd_hash returns valid=false', async () => {
     const token = buildToken({ badSdHash: true });
     const res = await verifyI2H2APresentation(token, {
-      mcpServerId,
+      serverId,
       nonce,
     });
 
@@ -243,7 +243,7 @@ describe('integration (mocked resolver and status)', () => {
   it('token with delegationDepth != 0 returns valid=false', async () => {
     const token = buildToken({ delegationDepth: 1 });
     const res = await verifyI2H2APresentation(token, {
-      mcpServerId,
+      serverId,
       nonce,
     });
 
@@ -254,7 +254,7 @@ describe('integration (mocked resolver and status)', () => {
   it('token with parentCredential != null returns valid=false', async () => {
     const token = buildToken({ parentCredential: 'urn:vc:parent:1' });
     const res = await verifyI2H2APresentation(token, {
-      mcpServerId,
+      serverId,
       nonce,
     });
 
@@ -265,7 +265,7 @@ describe('integration (mocked resolver and status)', () => {
   it('token allows missing authorization and returns null authorization', async () => {
     const token = buildToken({ authorization: undefined });
     const res = await verifyI2H2APresentation(token, {
-      mcpServerId,
+      serverId,
       nonce,
     });
 
@@ -276,7 +276,7 @@ describe('integration (mocked resolver and status)', () => {
   it('token returns error when delegatedBy is absent', async () => {
     const token = buildToken({ delegatedBy: '' });
     const res = await verifyI2H2APresentation(token, {
-      mcpServerId,
+      serverId,
       nonce,
     });
 
