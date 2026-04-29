@@ -2,7 +2,7 @@
 
 Reference implementation of I2H2A SD-JWT+KB verification for any integration point and other verifiers.
 
-Implements the **SD-JWT VC** profile from **[I2H2A v0.2](https://github.com/i2h2a-org/I2H2A-spec/blob/main/I2H2A-v0.2-draft.md)** (RFC 9901, ES256/P-256, KB-JWT holder binding). For protocol narratives, see **[I2H2A-v0.3.2-draft.md](https://github.com/i2h2a-org/I2H2A-spec/blob/main/I2H2A-v0.3.2-draft.md)** (current), plus **[v0.3.1](https://github.com/i2h2a-org/I2H2A-spec/blob/main/I2H2A-v0.3.1-draft.md)** and **[v0.3 snapshot](https://github.com/i2h2a-org/I2H2A-spec/blob/main/I2H2A-v0.3-draft.md)**.
+Implements the **SD-JWT VC** profile from **[I2H2A v0.2](https://github.com/i2h2a-org/I2H2A-spec/blob/main/I2H2A-v0.2-draft.md)** (RFC 9901, ES256/P-256, KB-JWT holder binding). For protocol narratives, see **[I2H2A-v0.3.3-draft.md](https://github.com/i2h2a-org/I2H2A-spec/blob/main/I2H2A-v0.3.3-draft.md)** (current), plus **[v0.2 snapshot](https://github.com/i2h2a-org/I2H2A-spec/blob/main/I2H2A-v0.2-draft.md)** as prior profile baseline.
 
 ## Installation
 
@@ -92,3 +92,4 @@ https://github.com/i2h2a-org/I2H2A-spec
 ## License
 
 MIT
+
