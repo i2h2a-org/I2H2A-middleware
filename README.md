@@ -2,7 +2,7 @@
 
 Reference implementation of I2H2A SD-JWT+KB verification for any integration point and other verifiers.
 
-Implements the [I2H2A v0.2 specification](https://github.com/i2h2a-org/I2H2A-spec/blob/main/I2H2A-v0.2-draft.md): SD-JWT VC format (RFC 9901), ES256/P-256 signatures, KB-JWT holder binding.
+Implements the **SD-JWT VC** profile from **[I2H2A v0.2](https://github.com/i2h2a-org/I2H2A-spec/blob/main/I2H2A-v0.2-draft.md)** (RFC 9901, ES256/P-256, KB-JWT holder binding). For the overarching **v0.3** protocol narrative, see **[I2H2A-v0.3-draft.md](https://github.com/i2h2a-org/I2H2A-spec/blob/main/I2H2A-v0.3-draft.md)**.
 
 ## Installation
 
@@ -83,7 +83,7 @@ Checks Bitstring Status List revocation status for the given `credentialStatus` 
 
 ## Credential format
 
-This SDK verifies **SD-JWT VC** credentials (RFC 9901) with **ES256/P-256** signatures only. SD-JWT VC format (v0.1) is not supported in v0.2+.
+This SDK verifies **SD-JWT VC** credentials (RFC 9901) with **ES256/P-256** signatures only—the **v0.2** interoperable credential shape. Older ad-hoc payloads (informally referred to alongside **v0.1** lineage) outside that profile are not supported.
 
 ## I2H2A specification
 
